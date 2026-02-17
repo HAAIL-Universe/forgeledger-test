@@ -7,79 +7,83 @@ Canonical technology decisions for this project. The builder contract (S1) requi
 ## Backend
 
 - **Language:** Python 3.11+
-- **Framework:** FastAPI 0.104+
+- **Framework:** FastAPI 0.109+
 - **Package manager:** pip
 - **Dependency file:** requirements.txt
-- **Virtual environment:** venv (`.venv/`)
-- **ASGI server:** uvicorn
+- **Virtual environment:** .venv/
 
-**Rationale:** FastAPI chosen for its automatic OpenAPI documentation generation, built-in request validation via Pydantic, excellent async support for database operations, and type-safe development experience. Python selected for rapid development, strong ecosystem for financial applications, and alignment with questionnaire requirements.
+**Why FastAPI:** Chosen for its modern async capabilities, automatic OpenAPI documentation, excellent type safety with Pydantic, and minimal boilerplate. Perfect for a REST API with clear endpoint contracts. The automatic validation and serialization reduce error-prone manual parsing.
 
 **Key libraries:**
-- `fastapi` — Web framework
-- `uvicorn[standard]` — ASGI server with performance optimizations
-- `pydantic` — Data validation and settings management
-- `asyncpg` — PostgreSQL async driver
-- `python-dateutil` — Date manipulation for transaction filtering
-- `python-dotenv` — Environment variable management
+- `pydantic` 2.5+ — Request/response validation and serialization
+- `uvicorn` 0.27+ — ASGI server for async FastAPI
+- `asyncpg` 0.29+ — High-performance async PostgreSQL driver
+- `python-dotenv` 1.0+ — Environment variable management
+- `pytest` 7.4+ — Testing framework
+- `pytest-asyncio` 0.23+ — Async test support
+- `httpx` 0.26+ — HTTP client for testing API endpoints
 
 ---
 
 ## Database
 
 - **Engine:** PostgreSQL 15+
-- **Host:** Neon (serverless PostgreSQL)
+- **Hosting:** Neon (serverless PostgreSQL)
 - **Driver/client:** asyncpg
-- **ORM strategy:** Repository pattern with raw SQL (no ORM)
+- **ORM strategy:** Raw SQL via repository pattern (no ORM)
 - **Schema management:** SQL migration files in `db/migrations/`
 - **Connection pooling:** asyncpg connection pool
 
-**Rationale:** PostgreSQL chosen for ACID compliance critical to financial data integrity, excellent DECIMAL type support for precise monetary calculations, and robust transaction handling. Neon provides serverless PostgreSQL with automatic scaling and connection pooling. Raw SQL via repository pattern selected over ORM for explicit control over financial queries, better performance visibility, and simpler debugging of monetary calculations.
+**Why PostgreSQL on Neon:** PostgreSQL provides robust ACID guarantees essential for financial data integrity. The DECIMAL type ensures precise monetary calculations without floating-point errors. Neon offers serverless PostgreSQL with automatic scaling, branching for development, and generous free tier — ideal for a financial ledger that needs reliability without operational overhead.
 
-**Schema conventions:**
-- UUID primary keys for all tables (collision-resistant, non-sequential)
-- DECIMAL(10,2) for monetary amounts (no floating-point precision issues)
-- Timestamps with timezone awareness (UTC storage)
-- Foreign key constraints enforced at database level
-- CHECK constraints for transaction/category types
+**Why no ORM:** For a simple schema (2 tables) with straightforward queries, raw SQL provides maximum control and performance. The repository pattern maintains clean separation without ORM complexity. Financial applications benefit from explicit query control to ensure correct decimal handling and transaction isolation.
+
+**Migration strategy:**
+- Numbered SQL files: `001_initial_schema.sql`, `002_add_index.sql`
+- Manual execution via psql or migration runner script
+- Forward-only migrations (no automatic rollback)
 
 ---
 
 ## Auth
 
-- **Strategy:** None (unauthenticated application)
-- **Authorization:** Not implemented
+- **Strategy:** None (MVP scope)
+- **Provider:** N/A
 - **Session management:** N/A
 
-**Rationale:** Per questionnaire specification, this is a simple application without authentication requirements. All endpoints are publicly accessible. Future enhancement to add user authentication would require revisiting this contract.
+**Why no auth:** Project specification explicitly states "authentication: None (simple application)". This is appropriate for a personal financial ledger or internal tool. All API endpoints are publicly accessible. Future auth can be added as a Phase 2 enhancement without architectural changes.
+
+**Security note:** While no user authentication exists, the application should still validate all inputs, use parameterized queries to prevent SQL injection, and enforce business rules at the API layer.
 
 ---
 
 ## Frontend
 
 - **Enabled:** Yes
-- **Language:** TypeScript 5.0+
-- **Framework:** React 18+
-- **Build tool:** Vite 5+
-- **Package manager:** npm
+- **Language:** TypeScript 5.3+
+- **Framework:** React 18.2+
+- **Build tool:** Vite 5.0+
 - **Directory:** `web/`
-- **Style approach:** CSS Modules + modern CSS (Grid/Flexbox)
+- **Package manager:** npm
+- **Node version:** 20 LTS
 
-**Rationale:** React selected for component reusability and mature ecosystem. TypeScript provides type safety crucial for financial data handling and reduces runtime errors. Vite chosen for fast dev server, optimized production builds, and excellent TypeScript/React developer experience. CSS Modules prevent style conflicts while maintaining simple, functional design per requirements.
+**Why React + TypeScript:** React provides component reusability essential for transaction forms, lists, and filters. TypeScript ensures type safety across API boundaries, catching errors at compile time. The combination is industry-standard with excellent tooling and community support.
+
+**Why Vite:** Vite offers instant hot module replacement, fast cold starts, and optimized production builds. Superior developer experience compared to Create React App. Native ESM support and efficient bundling make it ideal for modern React development.
 
 **Key libraries:**
-- `react` — UI framework
-- `react-dom` — React rendering
-- `react-router-dom` — Client-side routing
-- `date-fns` — Date formatting and manipulation
-- `axios` — HTTP client for API communication
-- `@tanstack/react-query` — Server state management and caching
+- `react-router-dom` 6.21+ — Client-side routing for Dashboard and potential future pages
+- `@tanstack/react-query` 5.17+ — Server state management, caching, and API data fetching
+- `axios` 1.6+ — HTTP client for API communication
+- `date-fns` 3.0+ — Date manipulation for transaction date handling
+- `react-hook-form` 7.49+ — Form state management for transaction and category forms
+- `zod` 3.22+ — Runtime schema validation matching backend Pydantic models
 
-**Component architecture:**
-- Presentation components (pure UI)
-- Container components (data fetching)
-- Custom hooks for business logic
-- Shared utilities for formatting (currency, dates)
+**UI libraries:**
+- `@headlessui/react` 1.7+ — Unstyled accessible UI components
+- `tailwindcss` 3.4+ — Utility-first CSS framework for rapid UI development
+
+**Why these choices:** React Query eliminates manual cache management and provides automatic refetching, perfect for a live financial ledger. React Hook Form offers performant form handling with minimal re-renders. Zod provides type-safe validation that can be derived from the same schemas used in TypeScript interfaces. Tailwind enables rapid, consistent styling without writing custom CSS.
 
 ---
 
@@ -90,7 +94,7 @@ Canonical technology decisions for this project. The builder contract (S1) requi
 - **Integration point:** N/A
 - **Embedding / vector search:** N/A
 
-**Rationale:** Not required for MVP financial ledger functionality.
+**Rationale:** Not applicable for MVP. Financial ledger requires deterministic, auditable operations. No natural language processing or AI categorization needed for manual transaction entry.
 
 ---
 
@@ -98,58 +102,73 @@ Canonical technology decisions for this project. The builder contract (S1) requi
 
 ### Backend Testing
 - **Framework:** pytest 7.4+
-- **Coverage target:** 80% minimum
+- **Async support:** pytest-asyncio
+- **Coverage tool:** pytest-cov
+- **Minimum coverage:** 80% for business logic, 60% overall
 - **Test directory:** `tests/`
-- **Test types:**
-  - Unit tests for business logic (repositories, services)
-  - Integration tests for API endpoints
-  - Database tests against test database
 
-**Key testing libraries:**
-- `pytest` — Test framework
-- `pytest-asyncio` — Async test support
-- `pytest-cov` — Coverage reporting
-- `httpx` — Async HTTP client for endpoint testing
+**Test structure:**
+```
+tests/
+├── unit/           # Business logic and utility tests
+├── integration/    # Database repository tests
+└── api/            # FastAPI endpoint tests
+```
+
+**Why pytest:** Industry standard for Python testing with excellent async support, fixtures, and parameterization. Clear assertion syntax and comprehensive plugin ecosystem.
 
 ### Frontend Testing
-- **Framework:** Vitest 1.0+
-- **Component testing:** React Testing Library
-- **Coverage target:** 70% minimum
+- **Unit/integration:** Vitest 1.2+
+- **Component testing:** React Testing Library 14+
+- **Coverage tool:** Vitest coverage (c8)
+- **Minimum coverage:** 70% for components, 80% for utility functions
 - **Test directory:** `web/src/__tests__/`
-- **E2E testing:** Not in MVP scope
 
-**Key testing libraries:**
-- `vitest` — Test runner (Vite-native)
-- `@testing-library/react` — Component testing utilities
-- `@testing-library/user-event` — User interaction simulation
-- `@vitest/ui` — Test UI dashboard
+**Why Vitest:** Native Vite integration, Jest-compatible API, extremely fast execution. React Testing Library encourages testing user behavior over implementation details, leading to more maintainable tests.
 
-**Rationale:** pytest selected for excellent async support and fixture system ideal for database testing. Vitest chosen for seamless Vite integration and faster execution than Jest. 80% backend coverage enforced due to financial data sensitivity; 70% frontend acceptable given UI-heavy nature.
+### E2E Testing
+- **Framework:** Not included in MVP
+- **Future consideration:** Playwright for critical user flows
 
 ---
 
 ## Deployment
 
-- **Target platform:** Render (Web Service)
-- **Database host:** Neon (managed PostgreSQL)
-- **Backend deployment:** Native Python (no containerization)
-- **Frontend deployment:** Static site build served by backend
-- **Server process:** uvicorn
-- **Environment:** Development/local primary; production-ready configuration available
+### Platform
+- **Target:** Render (Web Service)
+- **Server:** uvicorn with Gunicorn worker manager
+- **Region:** US-West (or closest to primary users)
+- **Instance type:** Starter (512 MB RAM) — sufficient for MVP
+- **Containerized:** No (Render native Python deployment)
 
-**Rationale:** Render selected per questionnaire requirements, provides free tier for development, automatic HTTPS, and simple Python deployment without Docker complexity. Neon provides serverless PostgreSQL with generous free tier and automatic connection pooling. Frontend built as static assets and served by FastAPI's StaticFiles middleware, simplifying deployment to single service.
+**Why Render:** Zero-config deployments from Git, free tier for MVP, automatic HTTPS, and managed PostgreSQL integration. Simpler than AWS for a single-service application. Native Python support eliminates Docker complexity while maintaining production-grade hosting.
 
-**Deployment configuration:**
-- Build command: `pip install -r requirements.txt && cd web && npm install && npm run build`
+### Database Hosting
+- **Platform:** Neon
+- **Connection:** Direct PostgreSQL connection via DATABASE_URL
+- **Pooling:** Application-level via asyncpg pool
+
+### Build Process
+**Backend:**
+1. Render detects Python app via `requirements.txt`
+2. Installs dependencies in isolated environment
+3. Runs database migrations (via build command)
+4. Starts uvicorn server
+
+**Frontend:**
+1. Build locally or in separate Render static site
+2. Execute `npm run build` → outputs to `web/dist/`
+3. Serve via Render static site or backend serves built files
+
+**Build commands (Render):**
+- Backend: `pip install -r requirements.txt && python scripts/migrate.py`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Health check endpoint: `/health`
-- Static files served from: `web/dist/`
 
-**Expected scale:**
-- Concurrent users: <100
-- Transactions per day: <1000
-- Database size: <1GB
-- Response time target: <500ms (p95)
+### Expected Scale (MVP)
+- **Users:** 1-10 concurrent users
+- **Requests:** <1000 requests/day
+- **Database:** <1000 transactions, <50 categories
+- **Storage:** <10 MB
 
 ---
 
@@ -157,33 +176,32 @@ Canonical technology decisions for this project. The builder contract (S1) requi
 
 ### Required Variables
 
-| Variable | Purpose | Example | Validation |
-|----------|---------|---------|------------|
-| `DATABASE_URL` | PostgreSQL connection string (Neon) | `postgresql://user:pass@ep-xxx.neon.tech/forgeledger?sslmode=require` | Must start with `postgresql://` |
-| `ENVIRONMENT` | Deployment environment | `development`, `production` | Enum validation |
+| Variable | Purpose | Example | Source |
+|----------|---------|---------|--------|
+| `DATABASE_URL` | PostgreSQL connection string from Neon | `postgresql://user:pass@ep-xxx.neon.tech/forgeledger?sslmode=require` | Neon dashboard |
+| `ENVIRONMENT` | Deployment environment identifier | `development`, `production` | Manual config |
+| `CORS_ORIGINS` | Allowed frontend origins for CORS | `http://localhost:5173,https://forgeledger.onrender.com` | Manual config |
 
 ### Optional Variables
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173` | `http://localhost:5173,https://app.forgeledger.com` |
-| `LOG_LEVEL` | Application logging level | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `DB_POOL_MIN_SIZE` | Minimum database connection pool size | `2` | `2` |
-| `DB_POOL_MAX_SIZE` | Maximum database connection pool size | `10` | `10` |
-| `API_PREFIX` | API route prefix | `/api` | `/api/v1` |
+| `LOG_LEVEL` | Application logging verbosity | `INFO` | `DEBUG`, `WARNING`, `ERROR` |
+| `DB_POOL_MIN_SIZE` | Minimum database connection pool size | `2` | `5` |
+| `DB_POOL_MAX_SIZE` | Maximum database connection pool size | `10` | `20` |
+| `API_PREFIX` | API route prefix | `/api/v1` | `/api/v2` |
 
 ### Development-Only Variables
 
-| Variable | Purpose | Default | Example |
-|----------|---------|---------|---------|
-| `RELOAD` | Enable auto-reload (uvicorn) | `true` | `true`, `false` |
-| `DEBUG` | Enable debug mode | `true` | `true`, `false` |
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `RELOAD` | Enable uvicorn auto-reload | `true` |
+| `DEBUG` | Enable debug mode and detailed errors | `true` |
 
-**Security notes:**
-- Never commit `.env` file to version control
-- Use `.env.example` as template
-- Rotate `DATABASE_URL` credentials if exposed
-- Neon credentials include SSL mode requirement
+**Environment file structure:**
+- `.env` — Local development (gitignored)
+- `.env.example` — Template committed to repo
+- Render dashboard — Production variables
 
 ---
 
@@ -198,29 +216,24 @@ The builder must create `forge.json` at the project root during Phase 0.
   "description": "Lightweight financial ledger for tracking income and expenses",
   "backend": {
     "language": "python",
-    "version": "3.11+",
     "framework": "fastapi",
+    "python_version": "3.11",
     "entry_module": "app.main",
     "entry_point": "app",
+    "server": "uvicorn",
     "test_framework": "pytest",
     "test_dir": "tests",
-    "test_command": "pytest tests/ -v --cov=app --cov-report=term-missing",
     "dependency_file": "requirements.txt",
     "venv_path": ".venv",
-    "python_path": "PYTHONPATH=.",
-    "dev_server": {
-      "command": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
-      "port": 8000
-    }
+    "package_manager": "pip"
   },
   "database": {
     "engine": "postgresql",
-    "version": "15+",
-    "host": "neon",
+    "version": "15",
     "driver": "asyncpg",
-    "migrations_dir": "db/migrations",
-    "schema_file": "db/schema.sql",
-    "seed_file": "db/seed.sql"
+    "host": "neon",
+    "migration_dir": "db/migrations",
+    "orm": "none"
   },
   "frontend": {
     "enabled": true,
@@ -228,126 +241,207 @@ The builder must create `forge.json` at the project root during Phase 0.
     "framework": "react",
     "build_tool": "vite",
     "dir": "web",
-    "entry_point": "src/main.tsx",
-    "build_cmd": "npm run build",
-    "dev_cmd": "npm run dev",
-    "test_cmd": "npm run test",
-    "test_framework": "vitest",
-    "dist_dir": "dist",
-    "dev_server": {
-      "port": 5173
-    }
-  },
-  "api": {
-    "style": "REST",
-    "prefix": "/api",
-    "documentation": "/docs",
-    "version": "v1"
+    "package_manager": "npm",
+    "node_version": "20",
+    "build_cmd": "build",
+    "dev_cmd": "dev",
+    "test_cmd": "test",
+    "output_dir": "dist"
   },
   "deployment": {
     "platform": "render",
-    "type": "web_service",
-    "region": "oregon",
-    "plan": "free",
-    "health_check_path": "/health",
-    "build_command": "pip install -r requirements.txt && cd web && npm install && npm run build",
-    "start_command": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    "backend_service_type": "web",
+    "frontend_service_type": "static",
+    "containerized": false,
+    "ci_cd": "none"
   },
   "features": {
     "authentication": false,
     "authorization": false,
-    "websockets": false,
-    "background_jobs": false,
-    "file_uploads": false,
-    "email": false
+    "api_documentation": true,
+    "cors": true,
+    "rate_limiting": false
   },
-  "code_quality": {
-    "backend_linter": "ruff",
-    "backend_formatter": "black",
-    "frontend_linter": "eslint",
-    "frontend_formatter": "prettier",
-    "type_checker": "mypy"
+  "architecture": {
+    "api_style": "REST",
+    "backend_pattern": "repository",
+    "frontend_pattern": "component_based",
+    "state_management": "react_query"
   }
 }
 ```
 
 ---
 
-## Additional Technical Decisions
+## Code Organization Standards
 
-### API Design Conventions
-- RESTful resource-based URLs
-- JSON request/response bodies
-- HTTP status codes: 200 (success), 201 (created), 400 (validation error), 404 (not found), 500 (server error)
-- Error responses include `detail` field with human-readable message
-- List endpoints support query parameters: `type`, `category_id`, `start_date`, `end_date`
-- ISO 8601 date format for all date fields
-- Monetary amounts always returned as strings to preserve precision
-
-### Backend Project Structure
+### Backend Structure
 ```
 app/
-├── main.py              # FastAPI application factory
-├── config.py            # Settings and configuration
-├── models/              # Pydantic models (request/response schemas)
-├── repositories/        # Database access layer
-├── services/            # Business logic layer
-├── routers/             # API route handlers
-└── utils/               # Shared utilities (date formatting, validation)
-
-db/
-├── migrations/          # SQL migration files (numbered)
-└── schema.sql           # Initial schema definition
-
-tests/
-├── conftest.py          # Pytest fixtures
-├── test_repositories/   # Repository tests
-├── test_services/       # Service layer tests
-└── test_api/            # API endpoint tests
+├── main.py              # FastAPI app initialization, middleware, CORS
+├── config.py            # Environment variables, settings
+├── api/
+│   ├── __init__.py
+│   ├── routes/
+│   │   ├── transactions.py   # Transaction endpoints
+│   │   └── categories.py     # Category endpoints
+│   └── dependencies.py       # Dependency injection (DB pool)
+├── services/
+│   ├── transaction_service.py  # Business logic for transactions
+│   └── category_service.py     # Business logic for categories
+├── repositories/
+│   ├── transaction_repository.py  # Database access for transactions
+│   └── category_repository.py     # Database access for categories
+├── models/
+│   ├── transaction.py   # Pydantic models for transactions
+│   └── category.py      # Pydantic models for categories
+└── exceptions.py        # Custom exception classes
 ```
 
-### Frontend Project Structure
+### Frontend Structure
 ```
 web/
 ├── src/
-│   ├── main.tsx              # Application entry point
-│   ├── App.tsx               # Root component
-│   ├── components/           # Reusable UI components
-│   │   ├── TransactionList/
-│   │   ├── TransactionForm/
-│   │   ├── CategoryManager/
-│   │   └── FilterBar/
-│   ├── pages/                # Page-level components
-│   │   └── Dashboard/
-│   ├── services/             # API client services
-│   │   ├── api.ts
-│   │   ├── transactions.ts
-│   │   └── categories.ts
-│   ├── hooks/                # Custom React hooks
-│   ├── utils/                # Utility functions (formatting, validation)
-│   ├── types/                # TypeScript type definitions
-│   └── __tests__/            # Frontend tests
-├── public/                   # Static assets
-├── index.html                # HTML entry point
-├── vite.config.ts            # Vite configuration
-├── tsconfig.json             # TypeScript configuration
-└── package.json              # NPM dependencies
+│   ├── components/
+│   │   ├── transactions/
+│   │   │   ├── TransactionList.tsx
+│   │   │   ├── TransactionForm.tsx
+│   │   │   └── TransactionFilters.tsx
+│   │   ├── categories/
+│   │   │   ├── CategoryManager.tsx
+│   │   │   └── CategoryForm.tsx
+│   │   └── ui/             # Reusable UI components
+│   ├── services/
+│   │   ├── api.ts          # Axios instance, interceptors
+│   │   ├── transactions.ts # Transaction API calls
+│   │   └── categories.ts   # Category API calls
+│   ├── hooks/
+│   │   ├── useTransactions.ts  # React Query hooks
+│   │   └── useCategories.ts
+│   ├── types/
+│   │   ├── transaction.ts
+│   │   └── category.ts
+│   ├── pages/
+│   │   └── Dashboard.tsx
+│   ├── App.tsx
+│   └── main.tsx
+├── public/
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── tailwind.config.js
 ```
 
-### Code Quality Standards
-- **Backend:** Black formatting (line length 100), Ruff linting, mypy type checking (strict mode)
-- **Frontend:** Prettier formatting, ESLint with TypeScript rules, strict TypeScript configuration
-- **Documentation:** Docstrings for all public functions, JSDoc for exported TypeScript functions
-- **Git hooks:** Pre-commit hooks for formatting and linting (optional but recommended)
+**Architectural enforcement:**
+- API routes only handle HTTP concerns (validation, serialization, status codes)
+- Services contain business logic, coordinate between repositories
+- Repositories execute SQL queries, return domain objects
+- Frontend components don't contain API logic — delegate to services
+- React Query manages server state; local state uses React hooks
 
-### Database Migration Strategy
-- Sequential numbered migrations: `001_initial_schema.sql`, `002_add_index.sql`
-- Each migration must be idempotent (safe to run multiple times)
-- Rollback script for each migration (optional but recommended)
-- Migration tracking table: `schema_migrations` with version and applied timestamp
+---
 
-### Error Handling Strategy
-- **Backend:** Structured exceptions with specific error types (ValidationError, NotFoundError, DatabaseError)
-- **Frontend:** Centralized error handling with user-friendly messages
-- **Logging:** Structured logging with correlation IDs for request tracing
-- **Database errors:** Catch and translate constraint violations to user-friendly messages
+## Development Workflow
+
+### Backend Development
+```bash
+# Setup
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run migrations
+python scripts/migrate.py
+
+# Start development server
+uvicorn app.main:app --reload --port 8000
+
+# Run tests
+pytest tests/ -v --cov=app
+```
+
+### Frontend Development
+```bash
+# Setup
+cd web
+npm install
+
+# Start development server
+npm run dev  # Runs on http://localhost:5173
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
+```
+
+### Database Management
+```bash
+# Connect to local PostgreSQL
+psql $DATABASE_URL
+
+# Connect to Neon production
+psql <neon-connection-string>
+
+# Run specific migration
+psql $DATABASE_URL -f db/migrations/001_initial_schema.sql
+```
+
+---
+
+## Version Control
+
+### Git Ignore Rules
+```
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment
+.env
+.env.local
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+```
+
+### Commit Message Convention
+```
+feat: Add transaction filtering by date range
+fix: Correct decimal precision in amount validation
+docs: Update API endpoint documentation
+test: Add integration tests for category repository
+refactor: Extract transaction validation logic to service
+```
+
+---
+
+## API Documentation
+
+- **Format:** OpenAPI 3.0 (auto-generated by FastAPI)
+- **Access:** `http://localhost:8000/docs` (Swagger UI)
+- **Alternative:** `http://localhost:8000/redoc` (ReDoc)
+- **Schema endpoint:** `http://localhost:8000/openapi.json`
+
+**Why auto-generated:** FastAPI generates OpenAPI documentation from Pydantic models and route definitions, ensuring documentation stays synchronized with implementation. Reduces maintenance burden and documentation drift.
+
+---
+
+## Performance Targets (MVP)
+
+- API response time: <200ms for list endpoints, <50ms for single resource
+- Frontend initial load: <2s on 3G connection
+- Time to interactive: <3s
+- Database query time: <100ms for filtered transaction queries
+
+**Note:** These are initial targets for a small dataset. Performance optimization is not a Phase 1 priority but should be monitored.

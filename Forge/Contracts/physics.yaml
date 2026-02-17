@@ -1,10 +1,10 @@
 # ForgeLedger Test -- API Physics (v0.1)
-# Canonical API specification for financial ledger transaction tracking
+# Canonical API specification for financial transaction tracking system
 
 info:
   title: "ForgeLedger Test API"
   version: "0.1.0"
-  description: "Lightweight financial ledger for tracking income and expenses with categorization and unified transaction view"
+  description: "Lightweight financial ledger for tracking income and expenses with unified transaction view"
 
 paths:
 
@@ -16,14 +16,16 @@ paths:
       auth: none
       response:
         status: "ok"
+        timestamp: string
 
-  /health/version:
+  /health/db:
     get:
-      summary: "Return application version and build information"
+      summary: "Database connectivity health check"
       auth: none
       response:
-        version: string
-        build_date: string
+        status: "ok" | "degraded" | "down"
+        database: "connected" | "disconnected"
+        latency_ms: number
 
   # -- Transactions -------------------------------------------------
 
@@ -32,18 +34,18 @@ paths:
       summary: "Create a new transaction (income or expense)"
       auth: none
       request:
-        amount: decimal (required, positive, max 2 decimal places)
+        amount: number (required, positive decimal, max 2 decimals)
         type: string (required, enum: "income" | "expense")
         category_id: uuid (required)
-        date: date (required, ISO format YYYY-MM-DD)
+        date: string (required, ISO 8601 date format YYYY-MM-DD)
         description: string (optional, max 1000 chars)
       response:
         id: uuid
-        amount: decimal
+        amount: number
         type: string
         category_id: uuid
         category_name: string
-        date: date
+        date: string
         description: string | null
         created_at: datetime
 
@@ -53,34 +55,34 @@ paths:
       query:
         type: string (optional, enum: "income" | "expense")
         category_id: uuid (optional)
-        date_from: date (optional, ISO format YYYY-MM-DD)
-        date_to: date (optional, ISO format YYYY-MM-DD)
-        limit: integer (optional, default 50, max 500)
+        date_from: string (optional, ISO 8601 date)
+        date_to: string (optional, ISO 8601 date)
+        limit: integer (optional, default 50, max 200)
         offset: integer (optional, default 0)
-        sort_by: string (optional, default "date", enum: "date" | "amount" | "created_at")
-        sort_order: string (optional, default "desc", enum: "asc" | "desc")
+        sort_by: string (optional, enum: "date" | "amount" | "created_at", default "date")
+        sort_order: string (optional, enum: "asc" | "desc", default "desc")
       response:
-        items: TransactionDetail[]
+        items: Transaction[]
         total: integer
+        limit: integer
+        offset: integer
         summary:
-          total_income: decimal
-          total_expense: decimal
-          net_balance: decimal
-          filtered_income: decimal
-          filtered_expense: decimal
-          filtered_balance: decimal
+          total_income: number
+          total_expense: number
+          net_balance: number
+          transaction_count: integer
 
   /transactions/{id}:
     get:
-      summary: "Get a specific transaction by ID with full details"
+      summary: "Get a specific transaction by ID"
       auth: none
       response:
         id: uuid
-        amount: decimal
+        amount: number
         type: string
         category_id: uuid
         category_name: string
-        date: date
+        date: string
         description: string | null
         created_at: datetime
 
@@ -88,71 +90,34 @@ paths:
       summary: "Update an existing transaction"
       auth: none
       request:
-        amount: decimal (optional, positive, max 2 decimal places)
+        amount: number (optional, positive decimal, max 2 decimals)
         type: string (optional, enum: "income" | "expense")
         category_id: uuid (optional)
-        date: date (optional, ISO format YYYY-MM-DD)
+        date: string (optional, ISO 8601 date)
         description: string (optional, max 1000 chars)
       response:
         id: uuid
-        amount: decimal
+        amount: number
         type: string
         category_id: uuid
         category_name: string
-        date: date
+        date: string
         description: string | null
         created_at: datetime
         updated_at: datetime
 
     delete:
-      summary: "Delete a transaction permanently"
+      summary: "Delete a transaction"
       auth: none
       response:
         status: "deleted"
         id: uuid
 
-  # -- Transaction Summaries ----------------------------------------
-
-  /transactions/summary:
-    get:
-      summary: "Get aggregated transaction summary data"
-      auth: none
-      query:
-        date_from: date (optional, ISO format YYYY-MM-DD)
-        date_to: date (optional, ISO format YYYY-MM-DD)
-        group_by: string (optional, enum: "month" | "category" | "type")
-      response:
-        total_income: decimal
-        total_expense: decimal
-        net_balance: decimal
-        transaction_count: integer
-        groups: SummaryGroup[]
-
-  /transactions/summary/category:
-    get:
-      summary: "Get transaction summary grouped by category"
-      auth: none
-      query:
-        date_from: date (optional, ISO format YYYY-MM-DD)
-        date_to: date (optional, ISO format YYYY-MM-DD)
-        type: string (optional, enum: "income" | "expense")
-      response:
-        categories: CategorySummary[]
-
-  /transactions/summary/monthly:
-    get:
-      summary: "Get monthly transaction summary for trend analysis"
-      auth: none
-      query:
-        months: integer (optional, default 12, max 36)
-      response:
-        months: MonthlySummary[]
-
   # -- Categories ---------------------------------------------------
 
   /categories:
     post:
-      summary: "Create a new transaction category"
+      summary: "Create a new category"
       auth: none
       request:
         name: string (required, min 1, max 100, unique)
@@ -164,27 +129,30 @@ paths:
         transaction_count: integer
 
     get:
-      summary: "List all categories with transaction counts"
+      summary: "List all categories with optional filtering"
       auth: none
       query:
         type: string (optional, enum: "income" | "expense")
+        sort_by: string (optional, enum: "name" | "transaction_count", default "name")
+        sort_order: string (optional, enum: "asc" | "desc", default "asc")
       response:
         items: CategoryWithStats[]
+        total: integer
 
   /categories/{id}:
     get:
-      summary: "Get a specific category with statistics"
+      summary: "Get a specific category by ID with usage statistics"
       auth: none
       response:
         id: uuid
         name: string
         type: string
         transaction_count: integer
-        total_amount: decimal
+        total_amount: number
         recent_transactions: TransactionSummary[]
 
     put:
-      summary: "Update a category name or type"
+      summary: "Update a category"
       auth: none
       request:
         name: string (optional, min 1, max 100, unique)
@@ -196,49 +164,67 @@ paths:
         transaction_count: integer
 
     delete:
-      summary: "Delete a category (fails if transactions exist)"
+      summary: "Delete a category (only if no transactions reference it)"
       auth: none
       response:
         status: "deleted"
         id: uuid
 
-  /categories/{id}/transactions:
+  # -- Dashboard & Analytics ----------------------------------------
+
+  /dashboard/summary:
     get:
-      summary: "List all transactions for a specific category"
+      summary: "Get dashboard summary statistics for specified date range"
       auth: none
       query:
-        date_from: date (optional, ISO format YYYY-MM-DD)
-        date_to: date (optional, ISO format YYYY-MM-DD)
-        limit: integer (optional, default 50, max 500)
-        offset: integer (optional, default 0)
+        date_from: string (optional, ISO 8601 date, default: 30 days ago)
+        date_to: string (optional, ISO 8601 date, default: today)
       response:
-        items: TransactionDetail[]
-        total: integer
-        category:
-          id: uuid
-          name: string
-          type: string
+        period:
+          from: string
+          to: string
+        totals:
+          income: number
+          expense: number
+          net: number
+        transaction_count:
+          income: integer
+          expense: integer
+          total: integer
+        top_income_categories: CategoryTotal[]
+        top_expense_categories: CategoryTotal[]
+        recent_transactions: Transaction[]
 
-  # -- Dashboard Data -----------------------------------------------
-
-  /dashboard:
+  /dashboard/trends:
     get:
-      summary: "Get comprehensive dashboard data including recent transactions and summaries"
+      summary: "Get time-series data for income and expense trends"
       auth: none
       query:
-        recent_limit: integer (optional, default 10, max 50)
+        date_from: string (required, ISO 8601 date)
+        date_to: string (required, ISO 8601 date)
+        granularity: string (optional, enum: "day" | "week" | "month", default "day")
       response:
-        summary:
-          total_income: decimal
-          total_expense: decimal
-          net_balance: decimal
-          current_month_income: decimal
-          current_month_expense: decimal
-          current_month_balance: decimal
-        recent_transactions: TransactionDetail[]
-        top_income_categories: CategorySummary[]
-        top_expense_categories: CategorySummary[]
-        monthly_trend: MonthlySummary[]
+        period:
+          from: string
+          to: string
+          granularity: string
+        data_points: TrendDataPoint[]
+
+  /dashboard/category-breakdown:
+    get:
+      summary: "Get spending breakdown by category for pie charts and analysis"
+      auth: none
+      query:
+        type: string (required, enum: "income" | "expense")
+        date_from: string (optional, ISO 8601 date)
+        date_to: string (optional, ISO 8601 date)
+      response:
+        type: string
+        period:
+          from: string | null
+          to: string | null
+        total: number
+        categories: CategoryBreakdown[]
 
   # -- Bulk Operations ----------------------------------------------
 
@@ -247,148 +233,171 @@ paths:
       summary: "Create multiple transactions in a single request"
       auth: none
       request:
-        transactions: TransactionCreate[] (max 100 items)
+        transactions: TransactionCreate[] (required, max 100 items)
       response:
-        created: TransactionDetail[]
+        created: Transaction[]
         failed: BulkOperationError[]
         summary:
-          total: integer
-          succeeded: integer
+          total_attempted: integer
+          successful: integer
           failed: integer
 
     delete:
-      summary: "Delete multiple transactions by ID"
+      summary: "Delete multiple transactions by ID list"
       auth: none
       request:
-        ids: uuid[] (required, max 100 items)
+        transaction_ids: uuid[] (required, max 100 items)
       response:
         deleted: uuid[]
         failed: BulkOperationError[]
         summary:
-          total: integer
-          succeeded: integer
+          total_attempted: integer
+          successful: integer
           failed: integer
 
-  # -- Export -------------------------------------------------------
+  # -- Export & Import ----------------------------------------------
 
-  /transactions/export:
+  /export/transactions:
     get:
-      summary: "Export transactions as CSV file"
+      summary: "Export transactions as CSV"
       auth: none
       query:
         type: string (optional, enum: "income" | "expense")
         category_id: uuid (optional)
-        date_from: date (optional, ISO format YYYY-MM-DD)
-        date_to: date (optional, ISO format YYYY-MM-DD)
-        format: string (optional, default "csv", enum: "csv" | "json")
+        date_from: string (optional, ISO 8601 date)
+        date_to: string (optional, ISO 8601 date)
+        format: string (optional, enum: "csv" | "json", default "csv")
       response:
         content_type: "text/csv" | "application/json"
-        filename: string
-        data: file download
+        body: CSV or JSON file download
 
-  # -- Validation ---------------------------------------------------
-
-  /transactions/validate:
+  /import/transactions:
     post:
-      summary: "Validate transaction data without creating"
+      summary: "Import transactions from CSV file"
       auth: none
       request:
-        amount: decimal
-        type: string
-        category_id: uuid
-        date: date
-        description: string | null
+        content_type: "multipart/form-data"
+        file: binary (CSV file)
+        options:
+          skip_duplicates: boolean (optional, default true)
+          validate_only: boolean (optional, default false)
+      response:
+        imported: Transaction[]
+        skipped: ImportSkippedRecord[]
+        errors: ImportError[]
+        summary:
+          total_rows: integer
+          imported: integer
+          skipped: integer
+          errors: integer
+
+  # -- Data Validation & Reference Data -----------------------------
+
+  /validation/transaction:
+    post:
+      summary: "Validate transaction data without creating record"
+      auth: none
+      request:
+        amount: number (required)
+        type: string (required)
+        category_id: uuid (required)
+        date: string (required)
+        description: string (optional)
       response:
         valid: boolean
         errors: ValidationError[]
 
-  /categories/validate:
-    post:
-      summary: "Validate category data without creating"
+  /reference/date-ranges:
+    get:
+      summary: "Get predefined date range options for filtering"
       auth: none
-      request:
-        name: string
-        type: string
       response:
-        valid: boolean
-        errors: ValidationError[]
-        name_available: boolean
-
-# -- Schemas ------------------------------------------------------
+        ranges: DateRangeOption[]
 
 schemas:
 
-  TransactionDetail:
+  Transaction:
     id: uuid
-    amount: decimal
+    amount: number
     type: string
     category_id: uuid
     category_name: string
-    date: date
+    date: string
     description: string | null
     created_at: datetime
-    updated_at: datetime | null
+
+  TransactionCreate:
+    amount: number
+    type: string
+    category_id: uuid
+    date: string
+    description: string | null
 
   TransactionSummary:
     id: uuid
-    amount: decimal
+    amount: number
     type: string
-    category_name: string
-    date: date
+    date: string
     description: string | null
 
-  TransactionCreate:
-    amount: decimal
+  Category:
+    id: uuid
+    name: string
     type: string
-    category_id: uuid
-    date: date
-    description: string | null
 
   CategoryWithStats:
     id: uuid
     name: string
     type: string
     transaction_count: integer
-    total_amount: decimal
+    total_amount: number
     last_used: datetime | null
 
-  CategorySummary:
-    id: uuid
-    name: string
-    type: string
-    amount: decimal
-    transaction_count: integer
-    percentage: decimal
+  CategoryTotal:
+    category_id: uuid
+    category_name: string
+    total: number
+    count: integer
+    percentage: number
 
-  SummaryGroup:
-    key: string
-    label: string
-    income: decimal
-    expense: decimal
-    balance: decimal
+  CategoryBreakdown:
+    category_id: uuid
+    category_name: string
+    amount: number
     transaction_count: integer
+    percentage: number
 
-  MonthlySummary:
-    month: string
-    year: integer
-    income: decimal
-    expense: decimal
-    balance: decimal
+  TrendDataPoint:
+    date: string
+    income: number
+    expense: number
+    net: number
     transaction_count: integer
 
   BulkOperationError:
     index: integer
-    item_id: uuid | null
+    transaction_id: uuid | null
     error: string
-    details: object | null
+    details: object
 
   ValidationError:
     field: string
     message: string
     code: string
 
-  ErrorResponse:
-    error: string
+  ImportSkippedRecord:
+    row: integer
+    reason: string
+    data: object
+
+  ImportError:
+    row: integer
+    field: string | null
     message: string
-    details: object | null
-    timestamp: datetime
+    value: string | null
+
+  DateRangeOption:
+    label: string
+    value: string
+    date_from: string
+    date_to: string

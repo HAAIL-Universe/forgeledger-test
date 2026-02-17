@@ -35,14 +35,13 @@ Auto-authorize: enabled.
    - **Any FAIL** (exit non-zero): Enter the Loopback Protocol per S10.3. Fix only the FAIL items, re-verify, re-audit. If 3 consecutive loops fail, STOP with `RISK_EXCEEDS_SCOPE`.
 
 7. Repeat steps 3-6 for each subsequent phase in order:
-   - **Phase 0 -- Genesis** (project skeleton, folder structure, database connection, /health endpoint, boot.ps1, forge.json)
-   - **Phase 1 -- Database Foundation** (Neon PostgreSQL connection, migrations setup, transactions + categories tables, seed data for default categories)
-   - **Phase 2 -- Core API Layer** (REST endpoints for transactions CRUD, categories CRUD, input validation, error handling, repository pattern implementation)
-   - **Phase 3 -- Business Logic Layer** (transaction service with balance calculation, category validation, transaction filtering by type/category/date range, running total computation)
-   - **Phase 4 -- Frontend Foundation** (React + Vite setup, TypeScript configuration, API client service layer, routing structure, basic layout components)
-   - **Phase 5 -- Transaction UI** (transaction list/table component, transaction form (add/edit), transaction filters, date range picker, category selector, delete confirmation)
-   - **Phase 6 -- Dashboard & Summary** (main dashboard view, summary cards (total income, total expenses, net balance), transaction timeline view, responsive layout, category management interface)
-   - **Phase 7 -- Ship Gate** (USER_INSTRUCTIONS.md, boot.ps1 finalization, environment variable validation, error boundary implementation, loading states, empty states, final audit sweep)
+   - **Phase 0 -- Genesis** (project skeleton, backend/frontend scaffolding, database configuration, /health endpoint, boot.ps1, forge.json)
+   - **Phase 1 -- Database Foundation** (PostgreSQL schema setup on Neon, categories table, transactions table, migrations, seed data, repository layer)
+   - **Phase 2 -- Category Management** (Category CRUD endpoints: POST /categories, GET /categories, PUT /categories/:id, DELETE /categories/:id, service layer, validation, tests)
+   - **Phase 3 -- Transaction Management** (Transaction CRUD endpoints: POST /transactions, GET /transactions, GET /transactions/:id, PUT /transactions/:id, DELETE /transactions/:id, filtering logic for type/category/date range, service layer, validation, tests)
+   - **Phase 4 -- Frontend Foundation** (React + Vite setup, TypeScript configuration, API client service layer, routing, state management, base layout components, responsive design foundation)
+   - **Phase 5 -- Dashboard UI** (Transaction list/table component, transaction filters (type, category, date range), summary view, transaction form (add/edit modal), category management UI, frontend-backend integration, real-time data updates)
+   - **Phase 6 -- Ship Gate** (USER_INSTRUCTIONS.md, boot.ps1 finalization, rate limiting, input validation audit, error handling audit, CORS configuration, environment variable documentation, production readiness checklist)
 
 8. After the final phase passes audit and is committed:
    - `boot_script: true`: Create `boot.ps1` per S9.8 of the builder contract. Run it. If it fails, fix the issue and re-run. Repeat until the app starts successfully (or 5 consecutive failures -> STOP with `ENVIRONMENT_LIMITATION`). Then HALT and report: "All phases complete. App is running."
@@ -55,24 +54,24 @@ Auto-authorize: enabled.
 - Diff log discipline per S11 applies to every phase: read -> plan -> scaffold -> work -> finalise. No `TODO:` placeholders at phase end.
 - Re-read contracts at the start of each new phase (S1 read gate is active from Phase 1 onward).
 - **Folder discipline:** Source code, tests, config files, and dependency manifests are ALWAYS created at the project root. `Forge/` contains only governance files (contracts, evidence, scripts). No project code may depend on `Forge/`.
-- **Layer discipline:** Strict adherence to clean architecture boundaries per `boundaries.json`. API routes call service layer only, services call repository layer only, no layer skipping permitted.
-- **Database discipline:** All database operations go through repository layer. Use parameterized queries. UUID primary keys. Proper transaction handling for multi-step operations.
-- **Frontend discipline:** All API calls go through dedicated API client service. No direct fetch() calls from components. State management follows single responsibility principle.
+- **No authentication system**: This is a simple application without authentication. Do not implement login, sessions, JWT tokens, or any auth middleware unless explicitly added to contracts later.
+- **Database connection**: Use Neon PostgreSQL. Connection string must be configurable via environment variable. Include proper connection pooling and error handling.
+- **Clean architecture**: Enforce strict layer separation per boundaries.json -- API routes do not contain business logic, services do not directly access database, repositories abstract all SQL.
+- **Frontend-backend separation**: Frontend communicates exclusively through REST API. No direct database access from React components. API client service handles all HTTP calls.
 
 ## Phase List
 
-- **Phase 0: Genesis** -- Project skeleton, folder structure (backend/, frontend/, tests/), database configuration, health endpoint, forge.json, boot.ps1 stub
-- **Phase 1: Database Foundation** -- Neon PostgreSQL connection, migration system, transactions + categories schema, foreign key constraints, seed data
-- **Phase 2: Core API Layer** -- REST endpoints implementation, input validation, error middleware, repository pattern, CRUD operations for both resources
-- **Phase 3: Business Logic Layer** -- Transaction service, category validation logic, filtering engine (type/category/date), running balance calculation
-- **Phase 4: Frontend Foundation** -- React + Vite + TypeScript setup, API client service, routing, layout shell, basic styling
-- **Phase 5: Transaction UI** -- Transaction list, form components, filters, date picker, category dropdown, delete confirmation modal
-- **Phase 6: Dashboard & Summary** -- Main dashboard, summary statistics, timeline view, responsive grid, category management UI
-- **Phase 7: Ship Gate** -- Final documentation, environment setup guide, error boundaries, loading/empty states, production-ready polish
+- **Phase 0**: Genesis (scaffolding, /health, boot.ps1, forge.json, .env.example)
+- **Phase 1**: Database Foundation (schema, migrations, repositories)
+- **Phase 2**: Category Management (Category CRUD API + services)
+- **Phase 3**: Transaction Management (Transaction CRUD API + services + filtering)
+- **Phase 4**: Frontend Foundation (React + Vite, TypeScript, routing, API client)
+- **Phase 5**: Dashboard UI (transaction list, filters, form, category management)
+- **Phase 6**: Ship Gate (documentation, validation audit, production readiness)
 
 ## Project Summary
 
-ForgeLedger Test is a lightweight financial ledger application built with Python (backend) and React + TypeScript (frontend). It provides a unified view for tracking both income and expense transactions. Users can manually log transactions, assign them to categories, and filter by type, category, or date range. The system maintains a running record of all financial activity with clear visualizations of income vs. expenses and current balance. The architecture follows clean layering principles with a PostgreSQL database hosted on Neon, REST API layer, business logic services, and a responsive React frontend. No authentication is required for this simple application -- it's designed for local or single-user deployment.
+ForgeLedger Test is a lightweight financial ledger application that tracks both incoming and outgoing transactions in a unified view. Users manually log income and expenses, categorise them, and maintain a clear running record of financial activity. The backend is built with Python and PostgreSQL (hosted on Neon), the frontend with React, TypeScript, and Vite. The application enforces clean architectural boundaries with strict layer separation (API routes, business logic services, database repositories), and provides a simple, functional UI for transaction and category management with filtering capabilities.
 
 ## Boot Script
 

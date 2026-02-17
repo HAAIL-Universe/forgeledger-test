@@ -1,291 +1,223 @@
 {
-  "description": "Layer boundary rules for ForgeLedger Test. Each layer defines a directory glob and a list of forbidden patterns to enforce clean architecture with strict separation of concerns between API routes, business logic, data access, and external services.",
+  "description": "Layer boundary rules for ForgeLedger Test. Each layer defines a directory glob and a list of forbidden patterns to enforce clean architecture separation between API routes, business services, data repositories, and frontend components.",
   "layers": [
     {
       "name": "api_routes",
-      "description": "Presentation layer -- parse HTTP requests, validate input, call services, return HTTP responses. No business logic, no direct database access, no raw SQL, no ORM models.",
+      "description": "HTTP presentation layer -- parse requests, validate input, call services, return responses. No business logic, no direct DB access, no raw SQL.",
       "glob": "backend/app/api/routes/*.py",
       "forbidden": [
         {
           "pattern": "asyncpg",
-          "reason": "Database connection handling belongs in repositories, not API routes"
+          "reason": "Database access belongs in repositories, not API routes"
         },
         {
           "pattern": "psycopg",
-          "reason": "Database connection handling belongs in repositories, not API routes"
+          "reason": "Database access belongs in repositories, not API routes"
         },
         {
-          "pattern": "\\bSELECT\\b",
+          "pattern": "\\bSELECT\\b.*\\bFROM\\b",
           "reason": "Raw SQL queries belong in repositories, not API routes"
         },
         {
-          "pattern": "\\bINSERT INTO\\b",
-          "reason": "Raw SQL inserts belong in repositories, not API routes"
+          "pattern": "\\bINSERT\\s+INTO\\b",
+          "reason": "Raw SQL statements belong in repositories, not API routes"
         },
         {
-          "pattern": "\\bUPDATE\\b.*\\bSET\\b",
+          "pattern": "\\bUPDATE\\s+\\w+\\s+SET\\b",
           "reason": "Raw SQL updates belong in repositories, not API routes"
         },
         {
-          "pattern": "\\bDELETE FROM\\b",
+          "pattern": "\\bDELETE\\s+FROM\\b",
           "reason": "Raw SQL deletes belong in repositories, not API routes"
         },
         {
-          "pattern": "from.*models import",
-          "reason": "Direct ORM model access belongs in repositories, not API routes"
-        },
-        {
-          "pattern": "\\.commit\\(\\)",
+          "pattern": "BEGIN\\s+TRANSACTION|COMMIT|ROLLBACK",
           "reason": "Transaction management belongs in repositories or services, not API routes"
         },
         {
-          "pattern": "\\.rollback\\(\\)",
-          "reason": "Transaction management belongs in repositories or services, not API routes"
+          "pattern": "def calculate_.*balance|def compute_.*total",
+          "reason": "Business calculations belong in services, not API routes"
         },
         {
-          "pattern": "Decimal.*calculation",
-          "reason": "Financial calculations belong in services, not API routes"
+          "pattern": "def validate_.*transaction|def check_.*category",
+          "reason": "Complex business validation belongs in services, not API routes"
         }
       ]
     },
     {
       "name": "services",
-      "description": "Business logic layer -- orchestration, validation, transaction categorization logic, financial calculations, aggregations. No HTTP framework imports, no raw SQL, no direct database connections.",
+      "description": "Business logic layer -- transaction processing, category management, balance calculations, validation rules. No direct DB access, no HTTP framework imports, no raw SQL.",
       "glob": "backend/app/services/*.py",
       "forbidden": [
         {
-          "pattern": "fastapi",
-          "reason": "HTTP framework imports belong in API routes, not services"
+          "pattern": "asyncpg",
+          "reason": "Database access belongs in repositories, not services"
         },
         {
-          "pattern": "from.*routes import",
-          "reason": "Services should not depend on API routes layer"
+          "pattern": "psycopg",
+          "reason": "Database access belongs in repositories, not services"
         },
         {
-          "pattern": "Request",
-          "reason": "HTTP request objects belong in API routes, not services"
-        },
-        {
-          "pattern": "Response",
-          "reason": "HTTP response objects belong in API routes, not services"
-        },
-        {
-          "pattern": "asyncpg\\.connect",
-          "reason": "Database connections belong in repositories, not services"
-        },
-        {
-          "pattern": "psycopg.*connect",
-          "reason": "Database connections belong in repositories, not services"
-        },
-        {
-          "pattern": "\\bSELECT\\b",
+          "pattern": "\\bSELECT\\b.*\\bFROM\\b",
           "reason": "Raw SQL queries belong in repositories, not services"
         },
         {
-          "pattern": "\\bINSERT INTO\\b",
-          "reason": "Raw SQL inserts belong in repositories, not services"
+          "pattern": "\\bINSERT\\s+INTO\\b",
+          "reason": "Raw SQL statements belong in repositories, not services"
         },
         {
-          "pattern": "\\bUPDATE\\b.*\\bSET\\b",
+          "pattern": "\\bUPDATE\\s+\\w+\\s+SET\\b",
           "reason": "Raw SQL updates belong in repositories, not services"
         },
         {
-          "pattern": "\\bDELETE FROM\\b",
+          "pattern": "\\bDELETE\\s+FROM\\b",
           "reason": "Raw SQL deletes belong in repositories, not services"
+        },
+        {
+          "pattern": "fastapi\\.(Request|Response|APIRouter)",
+          "reason": "HTTP framework imports belong in API routes, not services"
+        },
+        {
+          "pattern": "from fastapi import",
+          "reason": "HTTP framework dependencies belong in API routes, not services"
+        },
+        {
+          "pattern": "\\.execute\\(|cursor\\.",
+          "reason": "Direct database cursor operations belong in repositories, not services"
         }
       ]
     },
     {
       "name": "repositories",
-      "description": "Data access layer -- database queries, connections, transactions, ORM operations only. No business logic, no HTTP framework, no financial calculations, no categorization logic.",
+      "description": "Data access layer -- database queries, transactions, CRUD operations only. No business logic, no HTTP framework imports, no business validation.",
       "glob": "backend/app/repositories/*.py",
       "forbidden": [
         {
-          "pattern": "fastapi",
+          "pattern": "fastapi\\.(Request|Response|APIRouter)",
           "reason": "HTTP framework imports belong in API routes, not repositories"
         },
         {
-          "pattern": "from.*routes import",
-          "reason": "Repositories should not depend on API routes layer"
+          "pattern": "from fastapi import",
+          "reason": "HTTP framework dependencies belong in API routes, not repositories"
         },
         {
-          "pattern": "from.*services import",
-          "reason": "Repositories should not depend on services layer (inverse dependency)"
+          "pattern": "def calculate_.*balance|def compute_.*total",
+          "reason": "Business calculations belong in services, not repositories"
         },
         {
-          "pattern": "Request",
-          "reason": "HTTP request objects belong in API routes, not repositories"
-        },
-        {
-          "pattern": "Response",
-          "reason": "HTTP response objects belong in API routes, not repositories"
-        },
-        {
-          "pattern": "calculate.*balance",
-          "reason": "Financial calculations belong in services, not repositories"
-        },
-        {
-          "pattern": "validate.*category",
+          "pattern": "def validate_.*amount|def check_.*category_usage",
           "reason": "Business validation belongs in services, not repositories"
         },
         {
-          "pattern": "if.*type.*income.*expense",
-          "reason": "Transaction type logic belongs in services, not repositories (data access only)"
+          "pattern": "if.*balance.*<|if.*total.*>",
+          "reason": "Business logic conditions belong in services, not repositories"
         }
       ]
     },
     {
       "name": "models",
-      "description": "Data models layer -- Pydantic schemas, domain entities, type definitions only. No business logic, no database access, no HTTP framework, no calculations.",
+      "description": "Data models and schemas -- Pydantic models, database models, type definitions only. No business logic, no database operations, no HTTP handling.",
       "glob": "backend/app/models/*.py",
       "forbidden": [
         {
-          "pattern": "asyncpg",
-          "reason": "Database connections belong in repositories, not models"
+          "pattern": "\\bSELECT\\b.*\\bFROM\\b",
+          "reason": "Database queries belong in repositories, not models"
         },
         {
-          "pattern": "psycopg",
-          "reason": "Database connections belong in repositories, not models"
+          "pattern": "\\bINSERT\\s+INTO\\b",
+          "reason": "Database operations belong in repositories, not models"
         },
         {
-          "pattern": "\\bSELECT\\b",
-          "reason": "Raw SQL belongs in repositories, not models"
+          "pattern": "asyncpg|psycopg",
+          "reason": "Database client imports belong in repositories, not models"
         },
         {
-          "pattern": "\\bINSERT INTO\\b",
-          "reason": "Raw SQL belongs in repositories, not models"
+          "pattern": "fastapi\\.APIRouter",
+          "reason": "HTTP routing belongs in API routes, not models"
         },
         {
-          "pattern": "fastapi",
-          "reason": "HTTP framework imports belong in API routes, not models"
+          "pattern": "def calculate_|def process_|def validate_",
+          "reason": "Business logic methods belong in services, not models"
         },
         {
-          "pattern": "from.*routes import",
-          "reason": "Models should not depend on API routes layer"
-        },
-        {
-          "pattern": "from.*services import",
-          "reason": "Models should not depend on services layer"
-        },
-        {
-          "pattern": "from.*repositories import",
-          "reason": "Models should not depend on repositories layer"
+          "pattern": "\\.execute\\(|\\.fetch",
+          "reason": "Database operations belong in repositories, not models"
         }
       ]
     },
     {
       "name": "frontend_components",
-      "description": "UI presentation layer -- React components, rendering, user interaction only. No direct API calls, no business logic, no data fetching (use API services instead).",
-      "glob": "frontend/src/components/**/*.tsx",
+      "description": "UI presentation layer -- React components for display and user interaction only. No direct API calls, no business logic, no data fetching.",
+      "glob": "frontend/src/components/**/*.{tsx,ts}",
       "forbidden": [
         {
-          "pattern": "fetch\\(",
-          "reason": "Direct API calls belong in API client services, not UI components"
+          "pattern": "fetch\\(|axios\\.|http\\.",
+          "reason": "API calls belong in API client services, not components"
         },
         {
-          "pattern": "axios\\.",
-          "reason": "Direct API calls belong in API client services, not UI components"
-        },
-        {
-          "pattern": "http://",
-          "reason": "Direct URL construction belongs in API client services, not UI components"
-        },
-        {
-          "pattern": "https://",
-          "reason": "Direct URL construction belongs in API client services, not UI components"
-        },
-        {
-          "pattern": "\\.then\\(",
-          "reason": "Promise handling for API calls belongs in API client services, not UI components"
-        },
-        {
-          "pattern": "async.*fetch",
-          "reason": "Direct data fetching belongs in API client services, not UI components"
+          "pattern": "async.*fetch|await.*axios",
+          "reason": "Data fetching belongs in API client services, not components"
         },
         {
           "pattern": "localStorage\\.setItem.*token",
-          "reason": "Authentication logic belongs in auth service, not UI components"
+          "reason": "Auth token management belongs in auth services, not components"
         },
         {
-          "pattern": "new Date\\(\\).*calculation",
-          "reason": "Date calculations belong in utility services, not UI components"
+          "pattern": "def calculate_.*balance|const.*total.*=.*reduce",
+          "reason": "Complex calculations belong in services or hooks, not presentation components"
         },
         {
-          "pattern": "parseFloat.*toFixed",
-          "reason": "Financial calculations belong in services or utilities, not UI components"
+          "pattern": "\\.toFixed\\(2\\).*\\+.*\\.toFixed\\(2\\)",
+          "reason": "Financial calculations belong in services or utility functions, not components"
         }
       ]
     },
     {
       "name": "frontend_services",
-      "description": "API client layer -- HTTP requests to backend, data transformation, error handling. No UI rendering, no React hooks, no component logic, no state management.",
-      "glob": "frontend/src/services/*.ts",
+      "description": "Frontend API client layer -- HTTP calls to backend, request/response handling. No UI rendering, no business logic, no state management.",
+      "glob": "frontend/src/services/**/*.{ts,tsx}",
       "forbidden": [
         {
-          "pattern": "import.*from.*react",
-          "reason": "React imports belong in components, not API services"
+          "pattern": "import.*React.*from|import.*useState|import.*useEffect",
+          "reason": "React hooks belong in components or custom hooks, not API services"
         },
         {
-          "pattern": "useState",
-          "reason": "React hooks belong in components, not API services"
+          "pattern": "return.*<.*>|JSX\\.Element",
+          "reason": "UI rendering belongs in components, not API services"
         },
         {
-          "pattern": "useEffect",
-          "reason": "React hooks belong in components, not API services"
+          "pattern": "def calculate_.*balance|const.*total.*=.*reduce",
+          "reason": "Business calculations belong in business logic layer or utilities, not API services"
         },
         {
-          "pattern": "useContext",
-          "reason": "React hooks belong in components, not API services"
+          "pattern": "localStorage\\.getItem|sessionStorage\\.",
+          "reason": "Storage access should be abstracted in storage utilities, not mixed with API calls"
+        }
+      ]
+    },
+    {
+      "name": "frontend_hooks",
+      "description": "Frontend state management layer -- custom React hooks for data fetching and state. No direct API URLs, no business calculations, no UI rendering.",
+      "glob": "frontend/src/hooks/**/*.{ts,tsx}",
+      "forbidden": [
+        {
+          "pattern": "fetch\\(.*http|axios\\.get\\(.*http",
+          "reason": "API calls with hardcoded URLs belong in API services, not hooks"
         },
         {
-          "pattern": "JSX\\.Element",
-          "reason": "JSX types belong in components, not API services"
+          "pattern": "return.*<.*>|JSX\\.Element",
+          "reason": "UI rendering belongs in components, not hooks"
         },
         {
-          "pattern": "return.*<",
-          "reason": "JSX rendering belongs in components, not API services"
+          "pattern": "\\.toFixed\\(2\\).*[+\\-*/].*\\.toFixed\\(2\\)",
+          "reason": "Complex financial calculations belong in utility functions, not hooks"
         },
         {
-          "pattern": "ReactNode",
-          "reason": "React types belong in components, not API services"
-        },
-        {
-          "pattern": "\\.render\\(",
-          "reason": "Rendering logic belongs in components, not API services"
+          "pattern": "const.*amount.*=.*parseFloat.*[+\\-].*parseFloat",
+          "reason": "Business logic calculations belong in services or utilities, not hooks"
         }
       ]
     }
   ],
-  "known_violations": [
-    {
-      "layer": "services",
-      "file": "transaction_service.py",
-      "pattern": "\\bSELECT\\b",
-      "reason": "False positive: word 'select' in docstring ('select appropriate category'), not SQL"
-    },
-    {
-      "layer": "services",
-      "file": "category_service.py",
-      "pattern": "\\bDELETE FROM\\b",
-      "reason": "False positive: phrase 'delete from list' in comment, not SQL"
-    },
-    {
-      "layer": "frontend_components",
-      "file": "TransactionForm.tsx",
-      "pattern": "new Date\\(\\).*calculation",
-      "reason": "False positive: new Date() for default form value only, not calculation"
-    },
-    {
-      "layer": "repositories",
-      "file": "transaction_repository.py",
-      "pattern": "if.*type.*income.*expense",
-      "reason": "Acceptable: simple type validation in WHERE clause construction, not business logic"
-    },
-    {
-      "layer": "frontend_components",
-      "file": "TransactionList.tsx",
-      "pattern": "parseFloat.*toFixed",
-      "reason": "Acceptable: display formatting only (toFixed for rendering), not business calculation"
-    }
-  ]
+  "known_violations": []
 }

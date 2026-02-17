@@ -6,706 +6,670 @@ Canonical phase plan. Each phase is self-contained, shippable, and auditable. Th
 
 ## Phase 0 — Genesis
 
-**Objective:** Bootstrap project skeleton with working health endpoint, database connection, and essential tooling. Establish foundational project structure that matches architectural boundaries.
+**Objective:** Skeleton project that boots, passes lint, has one test, and serves health endpoint.
 
 **Deliverables:**
-- Project root structure with backend (`/backend`) and frontend (`/frontend`) directories
-- Backend: FastAPI application with `/health` endpoint returning `{ "status": "ok", "database": "connected" }`
-- Database: PostgreSQL connection to Neon with connection pooling (asyncpg)
-- Database migrations setup using Alembic
-- Frontend: Vite + React + TypeScript skeleton with basic routing
-- Root `boot.ps1` — installs backend deps (Poetry/pip), installs frontend deps (npm), runs DB migrations, starts uvicorn and Vite dev server concurrently
-- `pytest` setup with one health endpoint test
-- `vitest` setup with one component smoke test
-- Backend layered structure: `/routes` (API), `/services` (business logic), `/repositories` (data access), `/models` (schemas)
-- Frontend structure: `/components` (UI), `/services` (API client), `/hooks` (state management), `/types` (TypeScript definitions)
-- `forge.json` at project root with initial phase metadata
-- `.gitignore` for Python, Node, and IDE artifacts
-- `.env.example` with required environment variables (DATABASE_URL, API_PORT, etc.)
-- ESLint and Prettier configuration for frontend
-- Black and isort configuration for backend
+- Project structure matching clean architecture layers:
+  - `backend/` — Python FastAPI application
+    - `api/` — presentation layer (routes)
+    - `services/` — business logic layer
+    - `repositories/` — data access layer
+    - `models/` — Pydantic models and domain entities
+    - `database.py` — PostgreSQL connection manager
+  - `frontend/` — React TypeScript application (Vite)
+    - `src/components/` — UI components
+    - `src/services/` — API client services
+    - `src/types/` — TypeScript interfaces
+  - `migrations/` — Alembic database migrations
+- `boot.ps1` — installs backend deps (Python venv), frontend deps (npm), starts PostgreSQL connection test, starts uvicorn dev server
+- `backend/main.py` — FastAPI app with `/health` endpoint returning `{ "status": "ok", "database": "connected" }`
+- `backend/database.py` — SQLAlchemy async engine configured for Neon PostgreSQL
+- `backend/requirements.txt` — FastAPI, SQLAlchemy, asyncpg, alembic, pytest, pytest-asyncio
+- `frontend/package.json` — React, TypeScript, Vite, Vitest, React Router
+- `pytest` passes with one health endpoint test
+- `vitest` passes with one component smoke test
+- `.env.example` — template for DATABASE_URL, CORS_ORIGINS
+- `.gitignore` — Python venv, node_modules, .env, __pycache__, dist
+- `forge.json` — project metadata with phase tracking
 
 **Schema coverage:**
-- Database connection established (no tables yet)
+- Database connection established, no tables yet
 
 **Exit criteria:**
-- `boot.ps1` runs without errors on fresh clone
-- `GET /health` returns 200 with database connection status
+- `boot.ps1` runs without errors and starts both backend and frontend dev servers
+- `GET /health` returns 200 with database connection confirmed
 - `pytest` passes (1 backend test)
-- `vitest` passes (1 frontend test)
-- Database connection succeeds to Neon instance
-- Alembic migrations directory created and initialized
-- Frontend dev server starts and renders placeholder homepage
+- `npm run test` passes (1 frontend test)
+- Environment variable validation fails gracefully with clear error messages
 - `run_audit.ps1` passes all checks
 
 ---
 
-## Phase 1 — Category Management
+## Phase 1 — Categories Foundation
 
-**Objective:** Implement complete category CRUD operations with backend layering and frontend UI. Categories are foundational for transaction classification.
+**Objective:** Implement category management as the foundation for transaction categorization.
 
 **Deliverables:**
-- Database migration: `categories` table (id UUID PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')))
-- Repository layer: `CategoryRepository` class with methods: `create()`, `get_all()`, `get_by_id()`, `update()`, `delete()`, `get_by_type()`
-- Service layer: `CategoryService` class with business logic for category validation, duplicate checking, and safe deletion (verify no transactions reference category)
-- API routes:
-  - `POST /categories` — create new category with validation (name required, type must be 'income' or 'expense')
-  - `GET /categories` — list all categories with optional type filter
-  - `GET /categories?type=income` — filter categories by type
-  - `PUT /categories/{id}` — update category (name and/or type)
-  - `DELETE /categories/{id}` — delete category (fails with 409 if transactions exist)
-- Pydantic models: `CategoryCreate`, `CategoryUpdate`, `CategoryResponse`
-- Frontend API client: `categoryService.ts` with typed methods for all category operations
-- Frontend components:
-  - `CategoryList` — displays all categories grouped by type (income/expense)
-  - `CategoryForm` — modal form for create/edit with validation
-  - `CategoryCard` — individual category display with edit/delete actions
-- Frontend pages:
-  - `CategoriesPage` — full category management interface
-- Error handling: proper HTTP status codes, validation error messages
-- Unit tests for repository layer (5 tests)
-- Unit tests for service layer (8 tests covering validation and edge cases)
-- Integration tests for API endpoints (9 tests)
-- Frontend component tests for form and list (4 tests)
+- Alembic migration creating `categories` table:
+  - `id` UUID PRIMARY KEY (default gen_random_uuid())
+  - `name` VARCHAR(100) NOT NULL UNIQUE
+  - `type` VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense'))
+- `backend/models/category.py` — Pydantic models:
+  - `CategoryCreate` (name, type)
+  - `CategoryUpdate` (name, type — both optional)
+  - `CategoryResponse` (id, name, type)
+- `backend/repositories/category_repository.py` — data layer:
+  - `create_category(db, category_data)` — insert with duplicate name handling
+  - `get_all_categories(db, type_filter=None)` — list with optional type filter
+  - `get_category_by_id(db, category_id)` — fetch single category
+  - `update_category(db, category_id, category_data)` — update with validation
+  - `delete_category(db, category_id)` — delete with foreign key constraint check
+- `backend/services/category_service.py` — business logic:
+  - Validation: name required, type must be 'income' or 'expense'
+  - Business rule: cannot delete category if transactions reference it
+  - Default categories seeded: "Salary" (income), "Groceries" (expense), "Utilities" (expense), "Freelance" (income)
+- `backend/api/categories.py` — REST routes:
+  - `POST /api/categories` — create category
+  - `GET /api/categories` — list all categories (with optional ?type= filter)
+  - `PUT /api/categories/{id}` — update category
+  - `DELETE /api/categories/{id}` — delete category
+- `frontend/src/types/category.ts` — TypeScript interfaces matching backend models
+- `frontend/src/services/categoryService.ts` — API client for all category operations
+- `frontend/src/components/CategoryManager.tsx` — UI for category CRUD:
+  - List view with income/expense tabs
+  - Add category form (modal)
+  - Inline edit capability
+  - Delete confirmation dialog
+- Comprehensive test coverage:
+  - Pytest tests for all repository methods
+  - Pytest tests for service layer business rules
+  - Pytest tests for API endpoints (success and error cases)
+  - Vitest tests for CategoryManager component
 
 **Schema coverage:**
-- [x] `categories` table
+- [x] `categories` table (id, name, type)
 
 **Exit criteria:**
-- All CRUD operations work through API
-- Cannot create duplicate category names
-- Cannot delete category if transactions reference it
-- Type filter correctly separates income and expense categories
-- Frontend form validates required fields before submission
-- All backend tests pass (pytest: 22 tests)
-- All frontend tests pass (vitest: 4 tests)
-- API returns proper error messages for validation failures
+- All API endpoints return correct status codes (200, 201, 400, 404, 409)
+- Cannot create duplicate category names (409 Conflict)
+- Cannot delete category if referenced by transactions (400 Bad Request with helpful message)
+- Default categories seeded on first migration
+- Type filter works correctly (GET /api/categories?type=income)
+- Frontend component renders category list grouped by type
+- All tests pass (pytest + vitest)
 - `run_audit.ps1` passes all checks
 
 ---
 
-## Phase 2 — Transaction Core
+## Phase 2 — Transactions Core
 
-**Objective:** Implement transaction CRUD with proper layering, category relationships, and type validation. This is the heart of the ledger system.
+**Objective:** Implement transaction logging with full CRUD operations and category relationships.
 
 **Deliverables:**
-- Database migration: `transactions` table (id UUID PRIMARY KEY, amount DECIMAL(10,2) NOT NULL, type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')), category_id UUID FOREIGN KEY REFERENCES categories(id), date DATE NOT NULL, description TEXT, created_at TIMESTAMP DEFAULT NOW())
-- Repository layer: `TransactionRepository` class with methods: `create()`, `get_all()`, `get_by_id()`, `update()`, `delete()`, `get_by_filters()`, `get_summary_stats()`
-- Service layer: `TransactionService` class with business logic:
-  - Validate amount is positive
-  - Validate category exists and matches transaction type (income transaction must use income category)
-  - Validate date is not in future
-  - Calculate running balance
-  - Generate summary statistics (total income, total expenses, net balance)
-- API routes:
-  - `POST /transactions` — create transaction with full validation
-  - `GET /transactions` — list all transactions with pagination (default 50 per page)
-  - `GET /transactions?type=income` — filter by transaction type
-  - `GET /transactions?category_id={uuid}` — filter by category
-  - `GET /transactions?start_date={date}&end_date={date}` — filter by date range
-  - `GET /transactions?type=income&start_date=2024-01-01&end_date=2024-12-31` — combined filters
-  - `GET /transactions/{id}` — get single transaction with category details
-  - `PUT /transactions/{id}` — update transaction with same validation as create
-  - `DELETE /transactions/{id}` — soft or hard delete (configurable)
-  - `GET /transactions/summary` — return total income, total expenses, net balance
-- Pydantic models: `TransactionCreate`, `TransactionUpdate`, `TransactionResponse` (includes nested category), `TransactionSummary`
-- Database indexes: `idx_transactions_date`, `idx_transactions_type`, `idx_transactions_category_id` for query performance
-- Query optimization: eager loading of category data to avoid N+1 queries
-- Unit tests for repository layer (8 tests)
-- Unit tests for service layer (15 tests covering all validation rules and edge cases)
-- Integration tests for API endpoints (18 tests covering all filter combinations)
-- Test data fixtures: seed categories and transactions for testing
+- Alembic migration creating `transactions` table:
+  - `id` UUID PRIMARY KEY (default gen_random_uuid())
+  - `amount` DECIMAL(10,2) NOT NULL CHECK (amount > 0)
+  - `type` VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense'))
+  - `category_id` UUID FOREIGN KEY REFERENCES categories(id) ON DELETE RESTRICT
+  - `date` DATE NOT NULL (default CURRENT_DATE)
+  - `description` TEXT (nullable)
+  - `created_at` TIMESTAMP DEFAULT NOW()
+  - Index on `date` for performance
+  - Index on `category_id` for joins
+- `backend/models/transaction.py` — Pydantic models:
+  - `TransactionCreate` (amount, type, category_id, date, description)
+  - `TransactionUpdate` (all fields optional)
+  - `TransactionResponse` (id, amount, type, category_id, category_name, date, description, created_at)
+- `backend/repositories/transaction_repository.py` — data layer:
+  - `create_transaction(db, transaction_data)` — insert with foreign key validation
+  - `get_all_transactions(db, filters)` — list with filtering:
+    - `type` (income/expense)
+    - `category_id` (UUID)
+    - `start_date` / `end_date` (date range)
+    - Default sort: date DESC, created_at DESC
+  - `get_transaction_by_id(db, transaction_id)` — fetch with category join
+  - `update_transaction(db, transaction_id, transaction_data)` — update with validation
+  - `delete_transaction(db, transaction_id)` — delete by ID
+  - `get_balance_summary(db, filters)` — aggregate totals (total_income, total_expense, net_balance)
+- `backend/services/transaction_service.py` — business logic:
+  - Validation: amount must be positive, date cannot be future, category must exist and match type
+  - Business rule: category type must match transaction type
+  - Business rule: date validation (not future, reasonable past limit)
+  - Enrichment: attach category name to transaction responses
+- `backend/api/transactions.py` — REST routes:
+  - `POST /api/transactions` — create transaction
+  - `GET /api/transactions` — list with query params (?type=, ?category_id=, ?start_date=, ?end_date=)
+  - `GET /api/transactions/{id}` — get single transaction
+  - `PUT /api/transactions/{id}` — update transaction
+  - `DELETE /api/transactions/{id}` — delete transaction
+  - `GET /api/transactions/summary` — get balance summary (filtered)
+- `frontend/src/types/transaction.ts` — TypeScript interfaces
+- `frontend/src/services/transactionService.ts` — API client for all transaction operations
+- `frontend/src/components/TransactionForm.tsx` — Add/Edit form:
+  - Amount input (numeric, 2 decimal places)
+  - Type selector (income/expense radio buttons)
+  - Category dropdown (filtered by selected type)
+  - Date picker (defaults to today)
+  - Description textarea
+  - Form validation with helpful error messages
+- `frontend/src/components/TransactionList.tsx` — Transaction table:
+  - Columns: Date, Description, Category, Type, Amount
+  - Color coding: green for income, red for expense
+  - Click row to edit
+  - Delete button with confirmation
+  - Empty state for no transactions
+- Comprehensive test coverage:
+  - Pytest tests for repository layer (all CRUD operations)
+  - Pytest tests for service layer (validation rules)
+  - Pytest tests for API endpoints (success and error paths)
+  - Pytest test for category type mismatch prevention
+  - Vitest tests for TransactionForm validation
+  - Vitest tests for TransactionList rendering
 
 **Schema coverage:**
 - [x] `categories` table (Phase 1)
-- [x] `transactions` table
+- [x] `transactions` table (id, amount, type, category_id, date, description, created_at)
 
 **Exit criteria:**
-- All CRUD operations work through API
-- Cannot create transaction with amount <= 0
-- Cannot create income transaction with expense category (and vice versa)
-- Cannot create transaction with non-existent category
-- Cannot create transaction with future date
-- All filter combinations work correctly
-- Pagination returns correct page size and total count
-- Summary endpoint calculates correct totals
-- Database indexes are created and used by queries
-- All backend tests pass (pytest: 41 tests)
+- Cannot create transaction with category type mismatch (400 Bad Request)
+- Cannot create transaction with non-existent category (404 Not Found)
+- Amount validation prevents negative or zero values
+- Date validation prevents future dates
+- Foreign key constraint prevents category deletion when transactions exist
+- Transaction list returns results sorted by date (newest first)
+- All filters work correctly (type, category, date range)
+- Summary endpoint returns correct totals
+- All tests pass (pytest + vitest)
 - `run_audit.ps1` passes all checks
 
 ---
 
-## Phase 3 — Transaction UI & Filters
+## Phase 3 — Dashboard & Filtering
 
-**Objective:** Build comprehensive transaction interface with filtering, sorting, and summary display. Make the ledger immediately useful.
+**Objective:** Build the main dashboard with transaction filtering, search, and summary views.
 
 **Deliverables:**
-- Frontend API client: `transactionService.ts` with typed methods for all transaction operations and filter combinations
-- Frontend state management: Custom hooks for transaction data (`useTransactions`, `useTransactionFilters`, `useTransactionSummary`)
-- Frontend components:
-  - `TransactionList` — table view with columns: Date, Description, Category, Type, Amount
-  - `TransactionRow` — individual row with edit/delete actions
-  - `TransactionForm` — modal form for create/edit with category dropdown (filtered by type)
-  - `TransactionFilters` — filter panel with: type toggle, category dropdown, date range picker
-  - `TransactionSummary` — summary cards showing total income (green), total expenses (red), net balance (dynamic color)
-  - `EmptyState` — helpful message when no transactions match filters
-- Frontend pages:
-  - `DashboardPage` — main view combining summary, filters, and transaction list
-- UI features:
-  - Real-time summary updates as filters change
-  - Visual distinction between income (green) and expense (red) amounts
+- `frontend/src/pages/Dashboard.tsx` — Main application view:
+  - Page layout: header, filter sidebar, transaction list, summary panel
+  - Responsive design: sidebar collapses to drawer on mobile (<768px)
+- `frontend/src/components/FilterPanel.tsx` — Transaction filters:
+  - Type filter: All / Income / Expense (toggle buttons)
+  - Category filter: multi-select dropdown (grouped by type)
+  - Date range filter: start/end date pickers with presets (Today, This Week, This Month, This Year, Custom)
+  - Clear all filters button
+  - Active filter count badge
+  - Filter state persisted to URL query params
+- `frontend/src/components/SummaryPanel.tsx` — Financial summary:
+  - Total Income (green)
+  - Total Expense (red)
+  - Net Balance (green if positive, red if negative)
+  - Summary respects active filters
+  - Visual indicator: progress bar showing expense ratio
+  - Month-over-month comparison (if date filter is single month)
+- `frontend/src/components/TransactionTable.tsx` — Enhanced table:
+  - Pagination (25 per page)
   - Sortable columns (date, amount)
-  - Category badges with color coding
-  - Responsive table (stacks on mobile)
-  - Loading skeletons during data fetch
-  - Error toast notifications
-- Form validation:
-  - Amount must be positive number with 2 decimal places
-  - Date required and cannot be future
-  - Category required and filtered by transaction type
-  - Description optional but trimmed
-- Date range picker integration (react-datepicker or similar)
-- Pagination controls (Previous/Next with page info)
-- Optimistic UI updates for create/update/delete
-- Frontend component tests (12 tests covering form, filters, list, summary)
-- Integration tests with mock API (8 tests)
+  - Search bar (filters by description)
+  - Bulk actions: select multiple, delete selected
+  - Export button (downloads CSV — Phase 4 implementation)
+  - Loading states with skeleton loaders
+  - Hover actions: quick edit, duplicate, delete
+- `frontend/src/hooks/useTransactions.ts` — Custom hook:
+  - Manages transaction list state
+  - Handles filtering, pagination, sorting
+  - Debounced search (300ms)
+  - Optimistic updates for delete operations
+- `frontend/src/utils/formatters.ts` — Utility functions:
+  - `formatCurrency(amount)` — locale-aware formatting
+  - `formatDate(date)` — consistent date display
+  - `parseFilterParams(searchParams)` — URL param parsing
+- Category-based color coding throughout UI:
+  - Each category gets consistent color assignment
+  - Color palette: 8 distinct colors for visual differentiation
+- Empty states for all views:
+  - No transactions: "Add your first transaction" with CTA button
+  - No results: "No transactions match your filters" with clear filters button
+  - No categories: "Create categories first" with link to category manager
+- Comprehensive test coverage:
+  - Vitest tests for FilterPanel state management
+  - Vitest tests for SummaryPanel calculations
+  - Vitest tests for TransactionTable sorting and pagination
+  - Vitest tests for useTransactions hook
+  - Vitest tests for formatter utilities
 
 **Schema coverage:**
 - [x] `categories` table (Phase 1)
 - [x] `transactions` table (Phase 2)
 
 **Exit criteria:**
-- User can view all transactions in table format
-- User can create transaction with form validation
-- User can edit transaction with pre-filled form
-- User can delete transaction with confirmation dialog
-- Filters update transaction list in real-time
-- Summary shows correct totals for filtered transactions
-- Category dropdown only shows categories matching transaction type
-- Amount input enforces 2 decimal places
-- Date picker prevents future date selection
-- All frontend tests pass (vitest: 20 tests)
-- UI is fully responsive on mobile and desktop
+- Dashboard loads and displays all transactions on initial render
+- All filters work correctly and can be combined
+- Filter state syncs with URL (shareable filtered views)
+- Summary panel updates in real-time as filters change
+- Pagination works correctly (page state preserved during filter changes)
+- Search debouncing works (no API call until typing stops)
+- Table sorting works for date and amount columns
+- Empty states render correctly for all scenarios
+- Mobile responsive: sidebar becomes drawer, table becomes card list
+- All tests pass (vitest)
 - `run_audit.ps1` passes all checks
 
 ---
 
-## Phase 4 — Data Import & Export
+## Phase 4 — Data Import/Export
 
-**Objective:** Enable bulk transaction import from CSV and export to CSV/Excel. Critical for migrating from other tools and backup.
+**Objective:** Enable users to import transactions from CSV and export data for backup or analysis.
 
 **Deliverables:**
-- Backend: CSV parser service with validation
-  - Parse CSV with columns: date, amount, type, category_name, description
-  - Validate each row (date format, amount positive, type valid)
-  - Match category by name (case-insensitive)
-  - Create missing categories automatically (optional flag)
-  - Return detailed import results (success count, error list with row numbers)
-- Backend: Export service
-  - Generate CSV from transaction query results
-  - Include all transaction fields plus category name
-  - Apply same filters as transaction list
-  - Return as downloadable file with proper headers
-- API routes:
-  - `POST /transactions/import` — upload CSV file, return import results
-  - `GET /transactions/export` — download CSV with optional filters
-  - `GET /transactions/export?format=xlsx` — download Excel file
-- CSV template generation: `GET /transactions/template` — download empty CSV with proper headers
-- Frontend components:
-  - `ImportModal` — drag-and-drop file upload with preview
-  - `ImportResults` — display success/error summary after import
-  - `ExportButton` — dropdown with CSV/Excel options
-- File upload handling with size limit (5MB)
-- Progress indicator during import processing
-- Excel export using openpyxl (formatted with headers and auto-column width)
-- Unit tests for CSV parser (10 tests covering various edge cases)
-- Unit tests for export service (5 tests)
-- Integration tests for import/export endpoints (8 tests)
-- Frontend tests for import/export components (6 tests)
+- `backend/services/import_service.py` — CSV import logic:
+  - Parse CSV with validation: required columns (date, amount, type, category_name, description)
+  - Map category names to IDs (case-insensitive matching)
+  - Validation: amount format, type values, date format (ISO 8601 or common formats)
+  - Error handling: collect all validation errors, return detailed error report
+  - Batch insert: use transaction for atomicity (all or nothing)
+  - Dry-run mode: validate without inserting
+- `backend/services/export_service.py` — CSV export logic:
+  - Query transactions with filters (reuse transaction repository filtering)
+  - Format as CSV: Date, Description, Category, Type, Amount
+  - Stream large datasets (don't load all into memory)
+  - Filename convention: `forgeledger_export_YYYY-MM-DD.csv`
+- `backend/api/import_export.py` — REST routes:
+  - `POST /api/transactions/import` — upload CSV (multipart/form-data)
+    - Query param `?dry_run=true` for validation only
+    - Returns: `{ "success": true, "imported": 45, "errors": [] }` or error details
+  - `GET /api/transactions/export` — download CSV
+    - Accepts same filter query params as GET /api/transactions
+    - Returns CSV file with appropriate headers
+- `frontend/src/components/ImportDialog.tsx` — Import modal:
+  - File upload (drag-and-drop or click to browse)
+  - CSV template download link (example format)
+  - Dry-run preview: show validation results before import
+  - Progress indicator during upload
+  - Success summary: "45 transactions imported successfully"
+  - Error display: table of rows with validation errors
+- `frontend/src/components/ExportButton.tsx` — Export component:
+  - Export button in dashboard toolbar
+  - Dropdown menu: Export All / Export Filtered
+  - Progress indicator for large exports
+  - Success notification with file download
+- CSV template generation:
+  - `GET /api/transactions/template` — download empty template with headers and example rows
+- Validation rules for import:
+  - Amount must be positive decimal
+  - Type must be "income" or "expense" (case-insensitive)
+  - Date must be valid format (YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY)
+  - Category must exist (create missing categories option)
+  - Description is optional
+- Comprehensive test coverage:
+  - Pytest tests for CSV parsing with various formats
+  - Pytest tests for validation error collection
+  - Pytest tests for batch import transaction handling
+  - Pytest tests for export with filters
+  - Vitest tests for ImportDialog file upload
+  - Vitest tests for validation error display
 
 **Schema coverage:**
 - [x] `categories` table (Phase 1)
 - [x] `transactions` table (Phase 2)
 
 **Exit criteria:**
-- Can import valid CSV with 100+ transactions
-- Import validation catches and reports all errors with row numbers
-- Can optionally auto-create missing categories during import
-- Export generates valid CSV that can be re-imported
+- Can upload valid CSV and import all transactions
+- Validation errors are detailed and actionable (row number, column, error message)
+- Dry-run mode shows what would be imported without committing
 - Export respects active filters
-- Excel export opens correctly in Microsoft Excel and Google Sheets
-- Template download provides correct CSV structure
-- All tests pass (pytest: 23 tests, vitest: 6 tests)
-- Import handles large files (1000+ rows) without timeout
+- Export file opens correctly in Excel/Google Sheets
+- Large imports (1000+ rows) complete without timeout
+- Import is atomic: failures don't leave partial data
+- Template download provides clear example format
+- All tests pass (pytest + vitest)
 - `run_audit.ps1` passes all checks
 
 ---
 
 ## Phase 5 — Analytics & Insights
 
-**Objective:** Provide visual insights into financial trends. Help users understand spending patterns and income sources.
+**Objective:** Provide visual insights into spending patterns, category breakdowns, and trends over time.
 
 **Deliverables:**
-- Backend analytics service:
-  - Calculate monthly income/expense breakdown
-  - Calculate category distribution (top spending categories)
-  - Calculate trend data (month-over-month change)
-  - Calculate running balance over time
-- API routes:
-  - `GET /analytics/monthly` — monthly income/expense totals for past 12 months
-  - `GET /analytics/categories` — breakdown by category with percentages
-  - `GET /analytics/trends` — month-over-month growth rates
-  - `GET /analytics/balance-history` — running balance data points
-- Frontend charting library integration (Chart.js or Recharts)
-- Frontend components:
-  - `MonthlyChart` — bar chart showing income vs expenses by month
-  - `CategoryPieChart` — pie chart showing expense distribution by category
-  - `BalanceLineChart` — line chart showing balance over time
-  - `TrendIndicators` — up/down arrows with percentage change
-  - `InsightsPanel` — highlight key metrics (highest expense category, average monthly income, etc.)
-- Frontend pages:
-  - `AnalyticsPage` — dashboard with all charts and insights
-- Chart interactivity:
-  - Tooltips showing exact values
-  - Clickable segments to filter transactions
-  - Responsive charts that reflow on mobile
-- Date range selector for analytics (last 30/90/365 days, custom range)
-- Export charts as images (PNG)
-- Unit tests for analytics service (12 tests)
-- Integration tests for analytics endpoints (6 tests)
-- Frontend component tests for charts (8 tests)
+- `backend/services/analytics_service.py` — Analytics calculations:
+  - `get_category_breakdown(db, filters)` — spending by category (amount, percentage)
+  - `get_monthly_trends(db, start_date, end_date)` — time series data (month, income, expense, net)
+  - `get_top_expenses(db, limit, filters)` — largest expense transactions
+  - `get_spending_patterns(db)` — average daily/weekly/monthly spending
+- `backend/api/analytics.py` — REST routes:
+  - `GET /api/analytics/category-breakdown` — category breakdown (filtered)
+  - `GET /api/analytics/trends` — monthly trend data (date range required)
+  - `GET /api/analytics/top-expenses` — top N largest expenses
+  - `GET /api/analytics/patterns` — spending pattern summary
+- `frontend/src/pages/AnalyticsPage.tsx` — Analytics dashboard:
+  - Page layout: grid of chart cards
+  - Date range selector (affects all charts)
+- `frontend/src/components/charts/CategoryBreakdownChart.tsx` — Pie/Donut chart:
+  - Shows spending by category
+  - Interactive: click slice to filter transactions
+  - Percentage labels
+  - Legend with category colors
+- `frontend/src/components/charts/TrendChart.tsx` — Line chart:
+  - Income and expense trends over time
+  - Dual Y-axis or stacked area visualization
+  - Tooltip shows exact values
+  - Net balance line (optional toggle)
+- `frontend/src/components/charts/TopExpensesCard.tsx` — Bar chart:
+  - Horizontal bars for top 10 expenses
+  - Click bar to view transaction detail
+  - Shows transaction description and amount
+- `frontend/src/components/InsightsSummary.tsx` — Key metrics cards:
+  - Average daily spending
+  - Largest expense this month
+  - Most used category
+  - Spending trend indicator (up/down compared to last period)
+- Chart library integration:
+  - Install Chart.js or Recharts (React-friendly charting library)
+  - Responsive chart sizing
+  - Consistent color scheme matching category colors
+- Loading states for all analytics components
+- Empty states: "Not enough data for insights. Add more transactions."
+- Comprehensive test coverage:
+  - Pytest tests for all analytics calculations
+  - Pytest tests for analytics API endpoints
+  - Pytest tests for edge cases (no data, single transaction, date ranges)
+  - Vitest tests for chart rendering
+  - Vitest tests for chart interactions (click handlers)
 
 **Schema coverage:**
 - [x] `categories` table (Phase 1)
 - [x] `transactions` table (Phase 2)
 
 **Exit criteria:**
-- Monthly chart displays correct income/expense totals
-- Category pie chart shows accurate distribution
-- Balance line chart reflects running total correctly
-- All charts are responsive and work on mobile
-- Charts update when date range changes
-- Trend indicators show correct month-over-month change
-- All tests pass (pytest: 18 tests, vitest: 8 tests)
-- Analytics endpoints return data in under 500ms for 1000+ transactions
+- Category breakdown accurately represents spending distribution
+- Trend chart shows correct income/expense over time
+- Top expenses list shows largest transactions with correct amounts
+- All charts are responsive and render correctly on mobile
+- Chart interactions work (click to filter, tooltips)
+- Date range selector updates all charts simultaneously
+- Analytics calculations handle edge cases (no data, single month, etc.)
+- All tests pass (pytest + vitest)
 - `run_audit.ps1` passes all checks
 
 ---
 
-## Phase 6 — Performance & Polish
+## Phase 6 — Performance & Optimization
 
-**Objective:** Optimize query performance, add database indexes, implement caching, and polish UX details.
+**Objective:** Optimize database queries, implement caching, and ensure the application performs well with large datasets.
 
 **Deliverables:**
-- Database performance optimization:
-  - Add composite index on `transactions(date, type)` for filtered queries
-  - Add index on `transactions(created_at)` for recent activity queries
-  - Implement database query analysis and explain plans
-  - Add connection pooling configuration tuning
+- Database optimization:
+  - Composite index on `transactions(date, type)` for common filtered queries
+  - Analyze query plans for slow queries (EXPLAIN ANALYZE)
+  - Connection pooling configuration (SQLAlchemy pool_size, max_overflow)
 - Backend caching layer:
-  - Cache category list (rarely changes)
-  - Cache transaction summary (invalidate on transaction change)
-  - Use Redis or in-memory cache
+  - In-memory cache for category list (rarely changes, frequently queried)
+  - Cache decorator utility for service methods
+  - Cache invalidation on category create/update/delete
+  - Response caching for analytics endpoints (5-minute TTL)
 - API response optimization:
-  - Implement field selection (`?fields=id,amount,date` to reduce payload)
-  - Add compression middleware (gzip)
-  - Implement ETag support for conditional requests
+  - Pagination for all list endpoints (default 25, max 100)
+  - Partial response support: `?fields=id,amount,date` to reduce payload size
+  - ETag support for transaction list (cache validation)
+  - Compression: gzip response encoding for payloads > 1KB
 - Frontend performance:
-  - Implement virtual scrolling for large transaction lists (react-window)
-  - Add debounced search/filter inputs
-  - Lazy load charts and analytics page
-  - Optimize re-renders with React.memo and useMemo
-  - Implement optimistic updates for better perceived performance
-- UX polish:
-  - Add keyboard shortcuts (N for new transaction, / for search, etc.)
-  - Add toast notifications for all actions
-  - Add confirmation dialogs for destructive actions
-  - Add undo functionality for delete operations (5-second window)
-  - Improve loading states with skeleton screens
-  - Add error boundary for graceful error handling
-  - Add accessibility improvements (ARIA labels, keyboard navigation)
-- Frontend error handling:
-  - Retry logic for failed API calls
-  - Offline detection and messaging
-  - Form auto-save to localStorage
-- Performance monitoring:
-  - Add API response time logging
-  - Add frontend performance metrics (Core Web Vitals)
-- Load testing with 10,000 transactions
-- Performance benchmark tests (6 tests)
-- Accessibility audit and fixes
-- Cross-browser testing checklist
-
-**Schema coverage:**
-- [x] `categories` table (Phase 1)
-- [x] `transactions` table (Phase 2)
-- Additional indexes added
-
-**Exit criteria:**
-- Transaction list renders 1000+ items smoothly with virtual scrolling
-- API response times under 100ms for cached data
-- Category dropdown responds instantly (cached)
-- All filter operations complete in under 200ms
-- Page load time under 2 seconds on 3G connection
-- Lighthouse score above 90 for Performance, Accessibility, Best Practices
-- Keyboard shortcuts work correctly
-- Undo delete restores transaction correctly
-- All tests pass including performance benchmarks
-- `run_audit.ps1` passes all checks
-
----
-
-## Phase 7 — Search & Advanced Filters
-
-**Objective:** Implement full-text search across transactions and advanced filtering capabilities for power users.
-
-**Deliverables:**
-- Database: Add full-text search index on `transactions.description`
-- Backend search service:
-  - Full-text search on description field
-  - Search across multiple fields (description, category name, amount range)
-  - Fuzzy matching for typo tolerance
-  - Search result ranking and relevance scoring
-- API routes:
-  - `GET /transactions/search?q={query}` — full-text search
-  - `GET /transactions/search?q={query}&type=expense` — search with filters
-  - `GET /transactions?amount_min=100&amount_max=500` — amount range filter
-  - `GET /transactions?sort=amount&order=desc` — sorting options
-- Advanced filter combinations:
-  - Multiple categories (OR logic)
-  - Exclude categories (NOT logic)
-  - Amount ranges (min/max)
-  - Custom date ranges with presets (This Month, Last Quarter, etc.)
-- Frontend components:
-  - `SearchBar` — autocomplete search with recent searches
-  - `AdvancedFilters` — expandable panel with all filter options
-  - `FilterChips` — active filters displayed as removable chips
-  - `SavedFilters` — save and reuse filter combinations
-- Search features:
-  - Highlight matching text in results
-  - Search suggestions based on common queries
-  - Recent searches history (localStorage)
-  - Clear all filters button
-- Query builder for complex filter combinations
-- Search performance optimization (debounced input, cached results)
-- Unit tests for search service (10 tests)
-- Integration tests for search endpoints (8 tests)
-- Frontend tests for search and filter components (10 tests)
-
-**Schema coverage:**
-- [x] `categories` table (Phase 1)
-- [x] `transactions` table (Phase 2)
-- Full-text search index added
-
-**Exit criteria:**
-- Search returns relevant results within 200ms
-- Fuzzy search handles common typos
-- Advanced filters can be combined (e.g., expense + category + amount range)
-- Saved filters persist across sessions
-- Search highlights matching terms in results
-- All filter combinations work correctly together
-- All tests pass (pytest: 18 tests, vitest: 10 tests)
-- Search handles 10,000+ transactions efficiently
-- `run_audit.ps1` passes all checks
-
----
-
-## Phase 8 — Recurring Transactions
-
-**Objective:** Support recurring income and expenses with automatic generation. Essential for predictable cash flow management.
-
-**Deliverables:**
-- Database migration: `recurring_transactions` table (id UUID PRIMARY KEY, amount DECIMAL(10,2) NOT NULL, type VARCHAR(10) NOT NULL, category_id UUID FK, description TEXT, frequency VARCHAR(20) NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly')), start_date DATE NOT NULL, end_date DATE, last_generated TIMESTAMP, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW())
-- Repository layer: `RecurringTransactionRepository` with CRUD methods
-- Service layer: `RecurringTransactionService` with business logic:
-  - Create recurring transaction template
-  - Generate actual transactions based on schedule
-  - Handle end dates and automatic deactivation
-  - Preview upcoming transactions (next 3 months)
-- Scheduled task service:
-  - Daily job to generate due recurring transactions
-  - Background task runner (APScheduler or Celery)
-  - Job logging and error handling
-- API routes:
-  - `POST /recurring-transactions` — create recurring template
-  - `GET /recurring-transactions` — list all recurring templates
-  - `GET /recurring-transactions/{id}` — get single template
-  - `PUT /recurring-transactions/{id}` — update template
-  - `DELETE /recurring-transactions/{id}` — delete template
-  - `POST /recurring-transactions/{id}/pause` — pause generation
-  - `POST /recurring-transactions/{id}/resume` — resume generation
-  - `GET /recurring-transactions/{id}/preview` — preview next 5 occurrences
-- Pydantic models: `RecurringTransactionCreate`, `RecurringTransactionUpdate`, `RecurringTransactionResponse`, `RecurringPreview`
-- Frontend components:
-  - `RecurringList` — list of all recurring templates with status badges
-  - `RecurringForm` — form with frequency selector and date range
-  - `RecurringPreview` — modal showing upcoming transactions
-  - `RecurringBadge` — indicator on transaction list showing auto-generated items
-- Frequency options: Daily, Weekly (every 7 days), Bi-weekly (every 14 days), Monthly (same day each month), Yearly
-- Smart date handling for month-end edge cases (e.g., monthly on 31st)
-- Notification system for failed recurring generation
-- Unit tests for recurring service (15 tests covering all frequencies and edge cases)
-- Integration tests for recurring endpoints (12 tests)
-- Frontend tests for recurring components (8 tests)
-- Scheduled task tests (5 tests)
-
-**Schema coverage:**
-- [x] `categories` table (Phase 1)
-- [x] `transactions` table (Phase 2)
-- [x] `recurring_transactions` table
-
-**Exit criteria:**
-- Can create recurring transaction with all frequency types
-- Daily job generates transactions correctly
-- Monthly recurring handles month-end dates properly (e.g., Jan 31 → Feb 28)
-- Can pause and resume recurring templates
-- Preview shows correct upcoming dates
-- Auto-generated transactions appear in main transaction list with badge
-- End date stops generation automatically
-- All tests pass (pytest: 32 tests, vitest: 8 tests)
-- Scheduled job runs reliably without failures
-- `run_audit.ps1` passes all checks
-
----
-
-## Phase 9 — Budget Tracking
-
-**Objective:** Set and monitor category budgets with alerts when approaching or exceeding limits.
-
-**Deliverables:**
-- Database migration: `budgets` table (id UUID PRIMARY KEY, category_id UUID FK, amount DECIMAL(10,2) NOT NULL, period VARCHAR(20) NOT NULL CHECK (period IN ('weekly', 'monthly', 'quarterly', 'yearly')), start_date DATE NOT NULL, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW())
-- Repository layer: `BudgetRepository` with CRUD methods
-- Service layer: `BudgetService` with business logic:
-  - Calculate budget vs actual spending
-  - Calculate remaining budget
-  - Calculate percentage used
-  - Trigger alerts when thresholds crossed (50%, 80%, 100%, 120%)
-  - Handle budget rollover for new periods
-- API routes:
-  - `POST /budgets` — create budget for category
-  - `GET /budgets` — list all active budgets
-  - `GET /budgets/{id}` — get single budget with current status
-  - `PUT /budgets/{id}` — update budget amount or period
-  - `DELETE /budgets/{id}` — delete budget
-  - `GET /budgets/status` — overall budget health summary
-  - `GET /budgets/{id}/history` — historical budget performance
-- Budget status calculation:
-  - Under budget (green)
-  - At risk (yellow, 80%+)
-  - Over budget (red, 100%+)
-  - Severely over budget (dark red, 120%+)
-- Alert system:
-  - Generate alert when threshold crossed
-  - Store alerts in database for history
-  - Display alerts on dashboard
-- Frontend components:
-  - `BudgetList` — list of budgets with progress bars
-  - `BudgetForm` — form to create/edit budget with period selector
-  - `BudgetProgress` — visual progress bar with percentage and remaining amount
-  - `BudgetAlerts` — notification banner for budget warnings
-  - `BudgetCard` — individual budget display with status indicator
-- Frontend pages:
-  - `BudgetsPage` — budget management dashboard
-- Dashboard integration:
-  - Add budget summary to main dashboard
-  - Show budget alerts prominently
-  - Quick link to over-budget categories
-- Period handling for all budget types (week starts Monday, month starts 1st, etc.)
-- Budget rollover automation (reset counters for new period)
-- Historical budget tracking (compare actual vs budget over time)
-- Unit tests for budget service (18 tests covering calculations and alerts)
-- Integration tests for budget endpoints (10 tests)
-- Frontend tests for budget components (10 tests)
-
-**Schema coverage:**
-- [x] `categories` table (Phase 1)
-- [x] `transactions` table (Phase 2)
-- [x] `recurring_transactions` table (Phase 8)
-- [x] `budgets` table
-
-**Exit criteria:**
-- Can create budget for any expense category
-- Budget vs actual calculates correctly for all period types
-- Alerts trigger at correct thresholds (50%, 80%, 100%, 120%)
-- Progress bars reflect accurate percentage
-- Budget status updates in real-time as transactions are added
-- Monthly budgets roll over correctly on the 1st
-- Historical view shows past budget performance
-- Cannot create budget for income categories (expense only)
-- All tests pass (pytest: 28 tests, vitest: 10 tests)
-- `run_audit.ps1` passes all checks
-
----
-
-## Phase 10 — Multi-Currency Support
-
-**Objective:** Support multiple currencies with real-time exchange rates and currency conversion.
-
-**Deliverables:**
-- Database migration: Add `currency` VARCHAR(3) DEFAULT 'USD' to `transactions` table
-- Database migration: `exchange_rates` table (id UUID PRIMARY KEY, from_currency VARCHAR(3), to_currency VARCHAR(3), rate DECIMAL(10,6), fetched_at TIMESTAMP)
-- Database migration: `user_settings` table (id UUID PRIMARY KEY, default_currency VARCHAR(3) DEFAULT 'USD', display_currency VARCHAR(3) DEFAULT 'USD')
-- External API integration: Exchange rate provider (e.g., exchangerate-api.io)
-- Backend service: `CurrencyService` with methods:
-  - Fetch latest exchange rates
-  - Convert amount between currencies
-  - Cache rates (update daily)
-  - Handle rate fetch failures gracefully
-- Repository layer: `ExchangeRateRepository` and `UserSettingsRepository`
-- API routes:
-  - `GET /currencies` — list supported currencies
-  - `GET /exchange-rates` — current rates for all supported currencies
-  - `POST /exchange-rates/convert` — convert amount between two currencies
-  - `GET /settings/currency` — get user currency preferences
-  - `PUT /settings/currency` — update default and display currencies
-- Currency list: Support major currencies (USD, EUR, GBP, JPY, CAD, AUD, CHF, CNY, INR)
-- Transaction updates:
-  - Store original currency with each transaction
-  - Display amounts in user's preferred display currency
-  - Show original currency in tooltips
-- Summary calculations:
-  - Convert all transactions to display currency for totals
-  - Show multi-currency breakdown (amounts in original currencies)
-- Frontend components:
-  - `CurrencySelector` — dropdown with currency codes and symbols
-  - `CurrencyDisplay` — format amount with proper symbol and decimal places
-  - `CurrencyConverter` — quick conversion tool
-  - `MultiCurrencyWarning` — alert when viewing mixed-currency data
-- Transaction form: Currency selector with default from user settings
-- Settings page: Currency preference management
-- Exchange rate caching (24-hour TTL)
-- Scheduled task to refresh exchange rates daily
-- Fallback to cached rates if API unavailable
-- Unit tests for currency service (15 tests including conversion accuracy)
-- Integration tests for currency endpoints (8 tests)
-- Frontend tests for currency components (8 tests)
-
-**Schema coverage:**
-- [x] `categories` table (Phase 1)
-- [x] `transactions` table (Phase 2) — updated with currency field
-- [x] `recurring_transactions` table (Phase 8)
-- [x] `budgets` table (Phase 9)
-- [x] `exchange_rates` table
-- [x] `user_settings` table
-
-**Exit criteria:**
-- Can create transactions in any supported currency
-- Exchange rates fetch successfully from API
-- Conversion between currencies is accurate (within 0.01%)
-- Summary totals reflect converted amounts correctly
-- Display currency setting persists across sessions
-- Exchange rates cache for 24 hours
-- Fallback to cached rates works when API unavailable
-- Currency symbols display correctly (€, £, ¥, etc.)
-- All tests pass (pytest: 23 tests, vitest: 8 tests)
-- `run_audit.ps1` passes all checks
-
----
-
-## Phase 11 — Ship & Deploy
-
-**Objective:** Production hardening, comprehensive documentation, deployment configuration, and final quality assurance.
-
-**Deliverables:**
-- Environment configuration:
-  - Production `.env.example` with all required variables documented
-  - Environment validation on startup (fail fast if missing critical vars)
-  - Secret management guidelines (database URL, API keys)
-- Deployment configuration:
-  - Render deployment configuration (`render.yaml`)
-  - Database migration strategy for Render (auto-migrate on deploy)
-  - Static file serving configuration
-  - CORS configuration for production domain
-- Security hardening:
-  - Input validation on all API endpoints (Pydantic strict mode)
-  - SQL injection prevention audit (parameterized queries)
-  - Rate limiting on all endpoints (100 req/min per IP)
-  - HTTPS enforcement
-  - Security headers (HSTS, CSP, X-Frame-Options)
-  - Dependency vulnerability scan
-- Error handling:
-  - Global exception handler (no stack traces leak to client)
-  - Structured error responses with error codes
-  - Error logging to file and console
-  - Sentry integration for error tracking (optional)
-- Performance optimization:
-  - Database connection pool tuning for Render
-  - Static asset caching headers
-  - Database query optimization review
-  - Load testing with 1000 concurrent users
-- Logging:
+  - React.memo for expensive components (TransactionList, charts)
+  - Virtualized scrolling for transaction table (react-window)
+  - Lazy loading: code-split analytics page
+  - Debounced search and filter inputs
+  - Optimistic UI updates (update UI before API confirms)
+- `backend/middleware/performance.py` — Performance monitoring:
+  - Request timing middleware (log slow requests > 500ms)
+  - Database query counter (detect N+1 queries in development)
+  - Response size logging
+- Load testing scripts:
+  - `scripts/load_test.py` — pytest-based load test generating 10,000 transactions
+  - `scripts/benchmark.py` — measure API response times for common operations
+- Performance budgets:
+  - Dashboard initial load: < 2 seconds
+  - Transaction list load (25 items): < 500ms
+  - Filter/search response: < 300ms
+  - Analytics page load: < 1 second
+  - Import 1000 transactions: < 10 seconds
+- Monitoring and logging:
   - Structured logging (JSON format)
-  - Log levels configured by environment
-  - Request/response logging with sanitization
-  - Database query logging in development only
-- Monitoring:
-  - Health check endpoint enhanced with DB connection status
-  - `/metrics` endpoint for basic metrics (request count, errors, response times)
-  - Database connection pool metrics
-- Documentation:
-  - **README.md** — comprehensive project documentation including:
-    - Project description and purpose
-    - Key features list
-    - Tech stack overview
-    - Prerequisites (Python 3.11+, Node 18+, PostgreSQL)
-    - Local setup instructions (clone, install, configure, run)
-    - Environment variables reference (all vars documented)
-    - Database setup and migration instructions
-    - API documentation (all endpoints with examples)
-    - Frontend build and deployment
-    - Troubleshooting guide (common issues and solutions)
-    - Contributing guidelines
-    - License information
-  - `DEPLOYMENT.md` — Render deployment guide with step-by-step instructions
-  - `API.md` — complete API reference with request/response examples
-  - `ARCHITECTURE.md` — system architecture and design decisions
-  - Inline code documentation (docstrings for all public methods)
-- Testing:
-  - Full test suite run (all tests must pass)
-  - E2E tests with Playwright covering critical user journeys:
-    - Create transaction flow
-    - Filter and search flow
-    - Budget creation and alert flow
-    - Import/export flow
-  - Cross-browser testing (Chrome, Firefox, Safari)
-  - Mobile responsive testing (iOS Safari, Chrome Android)
-- Quality assurance:
-  - Code coverage above 80% (pytest-cov)
-  - Linting passes (Black, isort, ESLint, Prettier)
-  - Type checking passes (mypy for Python, tsc for TypeScript)
-  - No console errors or warnings
-  - Accessibility audit with axe DevTools
-- Deployment scripts:
-  - `boot.ps1` — complete local setup automation (one command to full stack)
-  - `deploy.ps1` — deployment validation and pre-deploy checks
-  - `run_audit.ps1` — comprehensive audit including all quality checks
-- Production smoke tests:
-  - Automated test suite that runs against deployed app
-  - Verify all critical endpoints return expected responses
-  - Verify database migrations applied correctly
+  - Error tracking with stack traces
+  - Performance metrics logged per request
+  - Database query logging in development (disabled in production)
+- Comprehensive test coverage:
+  - Pytest tests for caching behavior
+  - Pytest tests for pagination edge cases
+  - Load tests validate performance budgets
+  - Vitest tests for virtualized scrolling
+  - Vitest tests for optimistic updates
+
+**Schema coverage:**
+- [x] `categories` table (Phase 1)
+- [x] `transactions` table (Phase 2) + performance indexes
+
+**Exit criteria:**
+- All performance budgets met with 10,000 transactions in database
+- No N+1 queries detected in query logs
+- Dashboard loads in < 2 seconds with full dataset
+- Transaction list scrolling is smooth (60fps)
+- Analytics calculations complete in < 1 second
+- Caching reduces repeated query load (verify with metrics)
+- Load tests pass without errors or timeouts
+- All tests pass (pytest + vitest)
+- `run_audit.ps1` passes all checks
+
+---
+
+## Phase 7 — Error Handling & Validation
+
+**Objective:** Comprehensive error handling, input validation, and user-friendly error messages throughout the application.
+
+**Deliverables:**
+- `backend/exceptions.py` — Custom exception hierarchy:
+  - `AppException` (base)
+  - `ValidationError` (400)
+  - `NotFoundError` (404)
+  - `ConflictError` (409)
+  - `DatabaseError` (500)
+- `backend/middleware/error_handler.py` — Global error handler:
+  - Catches all exceptions
+  - Returns consistent error response format: `{ "error": { "code": "VALIDATION_ERROR", "message": "...", "details": {...} } }`
+  - Logs errors with context (user action, request ID, stack trace)
+  - Never exposes internal errors to client (sanitize 500 responses)
+- Backend validation layer:
+  - Pydantic model validation for all API inputs
+  - Custom validators: date range, amount precision, enum values
+  - Cross-field validation: category type matches transaction type
+  - Database constraint validation: unique names, foreign keys
+- `backend/services/validation_service.py` — Business rule validation:
+  - `validate_transaction_data()` — all transaction business rules
+  - `validate_category_data()` — category name uniqueness, type validity
+  - `validate_date_range()` — start <= end, not too far in past/future
+  - Returns detailed error objects with field-level messages
+- Frontend validation:
+  - Form-level validation: Zod schemas matching backend models
+  - Field-level validation: real-time feedback as user types
+  - Display validation errors inline (below input fields)
+  - Disable submit button until form is valid
+- `frontend/src/utils/errorHandler.ts` — Client-side error handling:
+  - Parse API error responses
+  - Display user-friendly error messages (toast notifications)
+  - Map error codes to user messages
+  - Retry logic for network errors
+  - Fallback error messages for unknown errors
+- `frontend/src/components/ErrorBoundary.tsx` — React error boundary:
+  - Catches render errors
+  - Displays fallback UI with error message
+  - "Report issue" button (logs error details)
+  - "Reload page" button to recover
+- Error message catalog:
+  - `frontend/src/constants/errorMessages.ts` — centralized error messages
+  - User-friendly messages for all error codes
+  - Actionable instructions ("Check your internet connection", "Please try again")
+- Input sanitization:
+  - Backend: strip HTML tags from text inputs, escape SQL (parameterized queries)
+  - Frontend: sanitize display of user-generated content (DOMPurify)
+- Rate limiting:
+  - API rate limiting middleware (10 requests/second per IP)
+  - Return 429 Too Many Requests with Retry-After header
+- Comprehensive test coverage:
+  - Pytest tests for all validation functions
+  - Pytest tests for error handler middleware
+  - Pytest tests for rate limiting
+  - Vitest tests for form validation
+  - Vitest tests for ErrorBoundary
+  - Vitest tests for error message display
 
 **Schema coverage:**
 - [x] `categories` table (Phase 1)
 - [x] `transactions` table (Phase 2)
-- [x] `recurring_transactions` table (Phase 8)
-- [x] `budgets` table (Phase 9)
-- [x] `exchange_rates` table (Phase 10)
-- [x] `user_settings` table (Phase 10)
 
 **Exit criteria:**
-- `boot.ps1` brings up full stack from fresh clone in under 5 minutes
-- All tests pass (pytest: 200+ tests, vitest: 80+ tests, E2E: 20+ tests)
-- Code coverage above 80%
-- No linting errors or type errors
-- README.md is comprehensive and accurate
-- API documentation matches actual implementation
-- Application deploys successfully to Render
-- Production smoke tests pass
-- No console errors in browser
-- Lighthouse scores: Performance 90+, Accessibility 95+, Best Practices 95+, SEO 90+
-- Load test handles 1000 concurrent users without errors
-- All environment variables documented
-- Security headers configured correctly
-- Rate limiting works (returns 429 when exceeded)
+- All API endpoints return consistent error format
+- Frontend displays user-friendly error messages (never raw API errors)
+- Form validation provides real-time feedback
+- Invalid inputs are rejected at all layers (frontend, API, database)
+- Error logs contain sufficient context for debugging
+- Rate limiting prevents abuse (verified with load test)
+- Error boundary catches render errors gracefully
+- All validation rules documented in test cases
+- All tests pass (pytest + vitest)
 - `run_audit.ps1` passes all checks
-- Application is publicly accessible and functional on Render URL
+
+---
+
+## Phase 8 — Ship & Deploy
+
+**Objective:** Final hardening, comprehensive documentation, deployment readiness, and production infrastructure setup.
+
+**Deliverables:**
+- **Comprehensive README.md:**
+  - Project overview and key features
+  - Technology stack (Python FastAPI, React TypeScript, PostgreSQL, Neon, Render)
+  - Prerequisites: Python 3.11+, Node.js 18+, PostgreSQL 14+
+  - Local setup instructions:
+    - Clone repository
+    - Set up environment variables (`.env` file)
+    - Install dependencies (`boot.ps1` or manual steps)
+    - Run database migrations
+    - Start backend and frontend dev servers
+  - Environment variables reference:
+    - `DATABASE_URL` — PostgreSQL connection string (Neon)
+    - `CORS_ORIGINS` — allowed frontend origins
+    - `SECRET_KEY` — for future session management
+  - Usage guide:
+    - Creating categories
+    - Adding transactions
+    - Using filters and search
+    - Exporting/importing data
+    - Viewing analytics
+  - API reference:
+    - All endpoints with method, path, request/response examples
+    - Error codes and meanings
+  - Development guide:
+    - Running tests (`pytest`, `npm run test`)
+    - Code structure and architecture
+    - Adding new features
+  - Deployment guide:
+    - Render setup (backend and frontend)
+    - Neon PostgreSQL configuration
+    - Environment variable setup in Render
+  - Troubleshooting section (common issues and solutions)
+  - License and contribution guidelines
+- `boot.ps1` — One-click full setup:
+  - Check prerequisites (Python, Node, Git)
+  - Create Python venv and install dependencies
+  - Install frontend dependencies
+  - Check for `.env` file (prompt to create if missing)
+  - Run database migrations
+  - Start backend server (background process)
+  - Start frontend dev server (foreground)
+  - Print success message with URLs
+- `USER_INSTRUCTIONS.md` — End-user guide:
+  - What is ForgeLedger Test
+  - Getting started (account not needed, local-first)
+  - How to add your first transaction
+  - Understanding categories
+  - Using filters to find transactions
+  - Interpreting analytics charts
+  - Importing transactions from CSV (with example file)
+  - Exporting data for backup
+  - Tips for effective financial tracking
+  - FAQ section
+- Deployment configuration:
+  - `render.yaml` — Render blueprint:
+    - Backend service: Python 3.11, `uvicorn main:app --host 0.0.0.0`
+    - Frontend service: Node 18, `npm run build`, static site
+    - Environment variables configured
+    - Health check endpoints
+  - `backend/Dockerfile` (optional, if using Docker):
+    - Multi-stage build for smaller image
+    - Production dependencies only
+    - Non-root user
+  - `frontend/Dockerfile` (optional):
+    - Build step with Vite
+    - Serve with nginx
+- Production hardening:
+  - Environment variable validation on startup (fail fast)
+  - Graceful shutdown handlers (SIGTERM, SIGINT)
+  - Database connection retry logic with exponential backoff
+  - Request timeout enforcement (30 seconds)
+  - CORS configuration locked down to production frontend URL
+  - Security headers: CSP, X-Frame-Options, HSTS
+  - SQL injection prevention audit (all queries use parameterization)
+  - XSS prevention audit (all user inputs sanitized)
+- Final testing suite:
+  - Full integration test: create category, create transaction, filter, export
+  - End-to-end test: simulate user workflow in frontend
+  - Performance test: load 10,000 transactions, verify response times
+  - Security test: attempt common attacks (SQL injection, XSS)
+- Monitoring and observability:
+  - Health check endpoint with database ping
+  - `/metrics` endpoint (optional: Prometheus-compatible metrics)
+  - Structured logging to stdout (JSON format for log aggregation)
+  - Error rate tracking
+- `scripts/seed_demo_data.py` — Demo data generator:
+  - Creates realistic demo dataset (100 transactions across 3 months)
+  - Useful for testing and screenshots
+- Production checklist:
+  - [ ] All tests pass (pytest + vitest)
+  - [ ] `run_audit.ps1` passes all checks
+  - [ ] README.md is complete and accurate
+  - [ ] USER_INSTRUCTIONS.md is beginner-friendly
+  - [ ] Environment variables documented
+  - [ ] Render deployment tested (staging environment)
+  - [ ] Database migrations run successfully on Neon
+  - [ ] Frontend builds without errors
+  - [ ] Health check endpoint returns 200
+  - [ ] Error logging works in production
+  - [ ] CORS is properly configured
+  - [ ] Security headers are set
+  - [ ] Performance budgets met in production environment
+- Comprehensive test coverage:
+  - Pytest integration tests for full workflows
+  - Vitest E2E tests (Playwright or Cypress)
+  - Security tests for common vulnerabilities
+  - Load tests validate production readiness
+
+**Schema coverage:**
+- [x] `categories` table (Phase 1)
+- [x] `transactions` table (Phase 2)
+
+**Exit criteria:**
+- `boot.ps1` successfully sets up the entire project from a fresh clone
+- README.md covers all setup, usage, and deployment steps
+- USER_INSTRUCTIONS.md enables non-technical users to use the application
+- Application deploys successfully to Render (backend and frontend)
+- Health check returns 200 in production
+- Database connection works with Neon PostgreSQL
+- All environment variables are documented and validated
+- No security vulnerabilities detected (OWASP Top 10 checked)
+- All tests pass (pytest + vitest + E2E)
+- Performance budgets met in production
+- Error logging captures all exceptions with context
+- `run_audit.ps1` passes all checks
+- Project is production-ready and maintainable
+
+---
+
+**END OF PHASES CONTRACT**

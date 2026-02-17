@@ -11,11 +11,12 @@ Canonical database schema for this project. The builder contract (S1) requires r
 - Table names: snake_case, plural
 - Column names: snake_case
 - Primary keys: UUID (gen_random_uuid())
-- Timestamps: TIMESTAMPTZ for audit fields, DATE for business dates
+- Timestamps: TIMESTAMPTZ for audit columns, DATE for transaction dates
+- Decimal precision: DECIMAL(10,2) for monetary amounts
 - Soft delete: No
-- Monetary values: DECIMAL(10,2) for currency precision
-- All tables include `created_at` timestamp
-- ENUM-like constraints implemented via CHECK constraints
+- CHECK constraints: Used for enum-like columns (type fields)
+- All tables include created_at timestamps for audit purposes
+- Foreign keys use ON DELETE CASCADE where appropriate to maintain referential integrity
 
 ---
 
@@ -34,12 +35,16 @@ CREATE TABLE categories (
 );
 ```
 
-**Column Notes:**
-- `name`: Unique category name across all types (e.g., "Salary", "Groceries", "Freelance")
-- `type`: Distinguishes income categories from expense categories
-- No `updated_at` as categories are typically created once
+**Column Details:**
+- `id`: Unique identifier for the category
+- `name`: Display name of the category (must be unique across all categories)
+- `type`: Category classification, either 'income' or 'expense'
+- `created_at`: Timestamp when category was created
 
-**Indexes:**
+**Constraints:**
+- UNIQUE on `name` ensures no duplicate category names
+- CHECK constraint on `type` enforces only valid values
+
 ```sql
 CREATE UNIQUE INDEX idx_categories_name ON categories(name);
 CREATE INDEX idx_categories_type ON categories(type);
@@ -49,14 +54,14 @@ CREATE INDEX idx_categories_type ON categories(type);
 
 ### transactions
 
-Stores all financial transactions (both income and expenses) with categorization and metadata.
+Stores all financial transactions (both income and expenses) in a unified ledger.
 
 ```sql
 CREATE TABLE transactions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     amount          DECIMAL(10,2) NOT NULL CHECK (amount > 0),
     type            VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
-    category_id     UUID REFERENCES categories(id) ON DELETE SET NULL,
+    category_id     UUID REFERENCES categories(id) ON DELETE RESTRICT,
     date            DATE NOT NULL,
     description     TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -64,222 +69,139 @@ CREATE TABLE transactions (
 );
 ```
 
-**Column Notes:**
-- `amount`: Always stored as positive value; `type` field determines if it's income or expense
-- `type`: Must match the type of the referenced category
-- `category_id`: Optional categorization; NULL allowed for uncategorized transactions
-- `date`: Business date of the transaction (not creation timestamp)
-- `description`: Free-text notes about the transaction
-- `updated_at`: Tracks when transaction was last modified
+**Column Details:**
+- `id`: Unique identifier for the transaction
+- `amount`: Transaction amount in decimal format (10 digits total, 2 decimal places)
+- `type`: Transaction type, either 'income' or 'expense'
+- `category_id`: Foreign key reference to categories table (nullable to allow uncategorized transactions)
+- `date`: The date when the transaction occurred (not the entry date)
+- `description`: Optional text description providing transaction details
+- `created_at`: Timestamp when transaction record was created
+- `updated_at`: Timestamp when transaction record was last modified
 
-**Indexes:**
+**Constraints:**
+- CHECK constraint on `amount` ensures only positive values
+- CHECK constraint on `type` enforces only valid values
+- FOREIGN KEY on `category_id` with RESTRICT to prevent deletion of categories with associated transactions
+- NOT NULL on `amount`, `type`, and `date` as these are required fields
+
 ```sql
 CREATE INDEX idx_transactions_category_id ON transactions(category_id);
 CREATE INDEX idx_transactions_type ON transactions(type);
 CREATE INDEX idx_transactions_date ON transactions(date DESC);
+CREATE INDEX idx_transactions_date_type ON transactions(date DESC, type);
 CREATE INDEX idx_transactions_created_at ON transactions(created_at DESC);
-CREATE INDEX idx_transactions_type_date ON transactions(type, date DESC);
 ```
 
-**Performance Notes:**
-- Composite index on `(type, date)` supports filtered date-range queries
-- `date DESC` ordering supports most recent transactions first (common query pattern)
+**Index Rationale:**
+- `idx_transactions_category_id`: Supports filtering by category
+- `idx_transactions_type`: Supports filtering by transaction type
+- `idx_transactions_date`: Supports date-based sorting and filtering (DESC for recent-first views)
+- `idx_transactions_date_type`: Composite index for combined date and type filtering
+- `idx_transactions_created_at`: Supports audit queries and chronological views
 
 ---
 
-## Views
+## Schema-to-Phase Traceability Matrix
 
-### transaction_summary
-
-Provides aggregated view of transactions for dashboard summary.
-
-```sql
-CREATE VIEW transaction_summary AS
-SELECT
-    t.type,
-    c.name AS category_name,
-    COUNT(*) AS transaction_count,
-    SUM(t.amount) AS total_amount,
-    DATE_TRUNC('month', t.date) AS month
-FROM transactions t
-LEFT JOIN categories c ON t.category_id = c.id
-GROUP BY t.type, c.name, DATE_TRUNC('month', t.date);
-```
-
-**Purpose:** Pre-aggregates common summary queries for dashboard display without complex application-level aggregation.
+| Table | Phase | Rationale |
+|-------|-------|-----------|
+| categories | Phase 0 (Foundation) | Core reference data required before any transactions can be created |
+| transactions | Phase 0 (Foundation) | Primary business entity, central to all application functionality |
 
 ---
 
-## Constraints & Business Rules
+## Data Integrity Rules
 
-### Category-Transaction Type Consistency
+### Foreign Key Policies
 
-While not enforced at the database level (to allow flexibility), the application SHOULD ensure that a transaction's `type` matches its category's `type`. This validation is handled in the business logic layer.
+1. **categories → transactions**
+   - Policy: ON DELETE RESTRICT
+   - Rationale: Categories with associated transactions cannot be deleted to maintain data integrity and prevent orphaned transaction records
+   - Application logic must handle category deletion by either reassigning transactions or preventing deletion
 
-**Rationale:** Database-level enforcement would require triggers or complex constraints; application-level validation provides clearer error messages and easier maintenance.
+### CHECK Constraints
 
-### Amount Validation
+1. **Transaction Amount**
+   - Constraint: `amount > 0`
+   - Rationale: Negative amounts are semantically incorrect; transaction type ('income' vs 'expense') indicates the direction of cash flow
 
-- All amounts must be positive (enforced via CHECK constraint)
-- Precision: 10 digits total, 2 decimal places (supports up to $99,999,999.99)
+2. **Transaction Type**
+   - Constraint: `type IN ('income', 'expense')`
+   - Rationale: Enforces valid transaction classifications at database level
 
-### Date Constraints
-
-- Transaction dates should not be in the future (enforced in application layer)
-- No lower bound on historical dates (allows import of old records)
+3. **Category Type**
+   - Constraint: `type IN ('income', 'expense')`
+   - Rationale: Enforces valid category classifications at database level
 
 ---
 
-## Initial Data Seeding
+## Seed Data Requirements
 
 ### Default Categories
 
-The following categories should be created during initial database setup:
+The application should include default categories for common transaction types:
 
 **Income Categories:**
-```sql
-INSERT INTO categories (name, type) VALUES
-    ('Salary', 'income'),
-    ('Freelance', 'income'),
-    ('Investment', 'income'),
-    ('Other Income', 'income');
-```
+- Salary
+- Freelance
+- Investment
+- Other Income
 
 **Expense Categories:**
-```sql
-INSERT INTO categories (name, type) VALUES
-    ('Groceries', 'expense'),
-    ('Rent', 'expense'),
-    ('Utilities', 'expense'),
-    ('Transportation', 'expense'),
-    ('Entertainment', 'expense'),
-    ('Healthcare', 'expense'),
-    ('Other Expense', 'expense');
-```
+- Housing
+- Transportation
+- Food & Dining
+- Utilities
+- Healthcare
+- Entertainment
+- Shopping
+- Other Expense
 
----
-
-## Schema-to-Phase Traceability
-
-| Table | Phase | Notes |
-|-------|-------|-------|
-| categories | Phase 0 | Core entity, required for transaction categorization |
-| transactions | Phase 0 | Core entity, primary business data |
-| transaction_summary | Phase 1 | Optimization view for dashboard performance |
-
-**Phase 0:** Establishes minimal viable schema with both core tables. Categories must exist before transactions due to foreign key relationship.
-
-**Phase 1:** Adds view for improved query performance as data volume grows.
+These should be created during initial database setup or first application launch.
 
 ---
 
 ## Migration Strategy
 
-### Phase 0 Migration
+1. **Phase 0 Initial Migration:**
+   - Create categories table
+   - Create transactions table
+   - Create all indexes
+   - Insert seed data for default categories
 
-1. Create `categories` table
-2. Create indexes on `categories`
-3. Create `transactions` table
-4. Create indexes on `transactions`
-5. Seed default categories
-6. Verify foreign key constraints
-
-### Phase 1 Migration
-
-1. Create `transaction_summary` view
-2. Test view performance with sample data
+2. **Future Migrations:**
+   - All schema changes must be backwards-compatible where possible
+   - Breaking changes require version increment in this document
+   - Migrations must be idempotent and reversible
 
 ---
 
-## Database Configuration Requirements
+## Query Performance Considerations
 
-### PostgreSQL Version
-- Minimum: PostgreSQL 13 (for `gen_random_uuid()` without extension)
-- Recommended: PostgreSQL 15+
+1. **Common Query Patterns:**
+   - List recent transactions (ORDER BY date DESC)
+   - Filter by date range (WHERE date BETWEEN)
+   - Filter by category (WHERE category_id =)
+   - Filter by type (WHERE type =)
+   - Combined filters (date + type + category)
 
-### Required Extensions
-None required for core functionality.
+2. **Index Coverage:**
+   - All common filter and sort operations are covered by indexes
+   - Composite index on (date, type) optimizes most common filtered views
 
-### Connection Pool Settings
-- Min connections: 2
-- Max connections: 10 (sufficient for single-user or small team usage)
-- Idle timeout: 300 seconds
-
-### Neon-Specific Notes
-- Database hosted on Neon serverless PostgreSQL
-- Automatic connection pooling provided by Neon
-- No special configuration required beyond standard PostgreSQL
-
----
-
-## Backup & Data Integrity
-
-### Backup Strategy
-- Daily automated backups via Neon platform
-- Point-in-time recovery available (Neon feature)
-- No custom backup scripts required
-
-### Data Integrity Checks
-- Foreign key constraints ensure referential integrity
-- CHECK constraints prevent invalid data entry
-- Unique constraints prevent duplicate categories
-
-### Audit Trail
-- `created_at` timestamp on all tables provides creation audit
-- `updated_at` on transactions tracks modification history
-- No explicit audit log table needed for MVP
+3. **Expected Data Volume:**
+   - Moderate transaction volume (hundreds to thousands of records)
+   - Low category volume (typically 10-50 categories)
+   - Indexes sufficient for expected scale
 
 ---
 
-## Performance Considerations
+## Notes
 
-### Expected Data Volume
-- Categories: ~20-50 records (low volume, mostly static)
-- Transactions: 100-1000 records per user per year (moderate volume)
-
-### Query Patterns
-1. **Most Common:** List recent transactions (filtered by type, category, date range)
-2. **Dashboard:** Aggregate sums by type and category
-3. **Detail View:** Single transaction lookup by ID
-4. **Bulk Operations:** Monthly summaries and reports
-
-### Index Strategy
-- Primary indexes support CRUD operations
-- Composite indexes optimize filtered list queries
-- No full-text search indexes needed (simple description text)
-
-### Scaling Notes
-- Current schema supports single-user to small team usage (<10 users)
-- No partitioning needed at this scale
-- No read replicas required
-- Neon's serverless architecture handles connection scaling
-
----
-
-## Future Schema Considerations
-
-### Not Included in MVP (potential Phase 2+)
-
-1. **Multi-user Support**
-   - Would require `users` table
-   - Foreign key from `transactions` to `users`
-   - Row-level security policies
-
-2. **Recurring Transactions**
-   - New `recurring_transactions` table
-   - Scheduler to generate transactions automatically
-
-3. **Attachments/Receipts**
-   - File storage reference table
-   - Foreign key from `attachments` to `transactions`
-
-4. **Budget Tracking**
-   - `budgets` table with category and amount limits
-   - Monthly budget vs. actual comparison
-
-5. **Account/Wallet Support**
-   - `accounts` table for multiple bank accounts or wallets
-   - Foreign key from `transactions` to `accounts`
-   - Balance tracking per account
-
-These features are explicitly OUT OF SCOPE for initial implementation but schema is designed to accommodate future extension without breaking changes.
+- No authentication/user system required for MVP
+- No soft delete; transactions can be permanently deleted
+- No audit trail beyond created_at/updated_at timestamps
+- Future consideration: Add user_id column if multi-user support is needed
+- Future consideration: Add recurring transaction support
+- Future consideration: Add attachment/receipt storage references

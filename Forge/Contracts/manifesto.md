@@ -5,135 +5,108 @@ If implementation conflicts with this manifesto, implementation is wrong.
 
 ---
 
-## 1) Product principle: transaction-centric, chronological truth
+## 1) Product principle: ledger-first, transaction-accurate
 
-ForgeLedger Test is a ledger-first application where transactions are the atomic unit of financial truth.
+ForgeLedger Test is a financial ledger that presents a unified, chronological view of all monetary activity.
 
-- Every financial event is represented as a transaction record with an immutable creation timestamp.
-- The dashboard displays transactions in chronological order by transaction date, not entry date.
-- Running balances are calculated from the complete transaction history, never stored as cached values.
-- Transaction history is append-preferred: updates are allowed but discouraged through UI friction (confirmation dialogs).
-- If a transaction exists in the database, it must be visible in the UI. No hidden or soft-deleted records in MVP.
-
----
-
-## 2) Type-first, schema-first, constraint-enforced
-
-ForgeLedger Test is built on strict type contracts at every layer.
-
-- Database schema is the canonical source of truth for data structure.
-- Transaction type (`income` | `expense`) is enforced at database level via CHECK constraint, never trusted from application logic alone.
-- Category relationships are enforced via foreign keys — orphaned transactions are impossible by design.
-- Backend Pydantic models mirror database schema exactly, including constraints (e.g., DECIMAL(10,2) precision, type enums).
-- Frontend TypeScript types are derived from API contracts, not invented independently.
-- If a field is NOT NULL in the database, it must be required in forms and API validation.
+- The transaction list is the primary interface — not summary boxes, not charts.
+- Every transaction is either income or expense. No ambiguous states, no "pending" or "draft" transactions.
+- The running balance is always derivable from the transaction log. Balance is computed, never stored separately.
+- Date and amount are immutable facts. If a transaction was entered incorrectly, it's edited transparently — not silently corrected.
+- Missing or incomplete transactions are visible as problems, not hidden.
 
 ---
 
-## 3) No godfiles, no blurred boundaries
+## 2) Schema-first, data integrity enforced
 
-Every layer has a single, explicit responsibility.
+ForgeLedger Test's data model is its contract with reality.
 
-### Backend (Python)
-- **Routes** — HTTP request parsing, response serialization, status codes only. No business logic.
-- **Services** — Business logic orchestration: validation, transaction creation, balance calculation, category management.
-- **Repositories** — Database queries only. Returns domain objects, not raw SQL results.
-- **Models** — Pydantic schemas for API contracts and database entities. No methods, pure data structures.
-
-### Frontend (React + TypeScript)
-- **Components** — UI rendering and user interaction only. No API calls, no business logic.
-- **API Services** — HTTP client functions for backend communication. Returns typed responses.
-- **Hooks** — State management and side effects (data fetching, form state).
-- **Types** — TypeScript interfaces mirroring API contracts.
-
-### Violations that are bugs
-- A route that queries the database directly.
-- A component that calls `fetch()` instead of using an API service.
-- A repository that contains validation logic.
-- A service that formats API responses (that's the route's job).
+- The PostgreSQL schema (`transactions`, `categories`) is the source of truth.
+- Database constraints (`CHECK`, `NOT NULL`, `FOREIGN KEY`) enforce business rules at the data layer.
+- Transaction `type` must be `'income'` or `'expense'` — enforced by CHECK constraint, not application logic.
+- Category assignments are referential. A transaction cannot reference a category that doesn't exist.
+- If the database rejects a write, the application reports the failure honestly — no silent fallbacks.
 
 ---
 
-## 4) Explicit over implicit, boring over clever
+## 3) No godfiles, clean boundaries
 
-ForgeLedger Test prioritizes readability and debuggability over abstraction.
+Every layer has a defined role. Mixing responsibilities is a defect.
 
-- Category filtering is done via SQL WHERE clauses, not in-memory array filters.
-- Date range queries use explicit `date >= start_date AND date <= end_date`, not date math libraries unless necessary.
-- Transaction amounts are stored as DECIMAL(10,2) and handled as strings in JSON, never as floating-point numbers.
-- API error responses include explicit error codes and human-readable messages, not just HTTP status codes.
-- No magic: a developer should be able to trace a transaction creation from form submission → API call → service method → repository insert → database row.
+### Backend layers (Python)
+- **Routes** — HTTP request parsing, response serialization, status codes. No database calls, no calculations.
+- **Services** — Business logic: transaction validation, balance calculation, category usage checks. Orchestrates repository calls.
+- **Repositories** — SQL queries only. No validation, no business rules, no formatting.
 
----
+### Frontend layers (TypeScript/React)
+- **Components** — UI rendering and user interaction. No direct API calls.
+- **API clients** — HTTP requests to backend. No state management, no UI logic.
+- **State management** — Application state (transaction list, filters, selected category). No data fetching logic.
 
-## 5) Confirm-before-delete, warn-before-update
-
-ForgeLedger Test respects the permanence of financial records.
-
-### Actions requiring confirmation
-- **Transaction deletion** — "Are you sure you want to delete this transaction? This action cannot be undone."
-- **Category deletion** — "This category is used by X transactions. Are you sure you want to delete it?" (Blocked if foreign key constraint would fail.)
-- **Transaction update** — No confirmation required but shows "Last modified" timestamp in UI after save.
-
-### Actions exempt from confirmation
-- **Transaction creation** — Direct submission, no confirmation dialog.
-- **Category creation** — Direct submission.
-- **Filtering/viewing data** — Read-only operations never require confirmation.
-
-### Constraint violations
-- Attempting to delete a category used by transactions returns a 400 error with clear message: "Cannot delete category '{name}' — it is used by {count} transactions."
-- Attempting to create a transaction with invalid type returns 400: "Transaction type must be 'income' or 'expense'."
+Violations of these boundaries are bugs, even if the feature appears to work.
 
 ---
 
-## 6) Financial integrity: precision and audit trail
+## 4) Manual entry over automation
 
-ForgeLedger Test treats financial data with accounting-level rigor.
+ForgeLedger Test is built for deliberate, user-driven financial tracking.
 
-- Transaction amounts are stored as DECIMAL(10,2), never FLOAT or INTEGER cents.
-- Currency precision is always two decimal places in storage, API, and UI.
-- The `created_at` timestamp is system-generated and immutable — it records when the transaction was entered.
-- The `date` field is user-provided and represents when the transaction occurred — this is used for chronological display.
-- Running balance calculations are deterministic: same transaction set → same balance every time.
-- If a transaction is updated, the `created_at` timestamp does not change (update timestamp would be a separate field in a future version).
-
-### Audit requirements
-- Every transaction stores: amount, type, date, description, category, creation timestamp.
-- API responses for transaction lists include all fields, not summary views.
-- Deletes are hard deletes in MVP (soft deletes and audit logs are post-MVP).
+- Every transaction is manually entered by the user. No CSV imports, no bank API integrations, no auto-categorization in MVP.
+- Users explicitly choose the category, date, amount, and type for each transaction.
+- The system provides structure (categories, transaction types) but never assumes intent.
+- Filters are assistive tools for viewing transactions, not automated rules.
 
 ---
 
-## 7) Data locality and privacy by default
+## 5) Transparency over convenience
 
-ForgeLedger Test operates as a single-tenant system with no authentication in MVP.
+The system prioritizes clarity and auditability over speed or "smart" features.
 
-- No user accounts, no multi-tenancy — all transactions belong to the single application instance.
-- Database hosted on Neon PostgreSQL with connection string stored in environment variables, never committed to version control.
-- No third-party analytics or tracking in MVP.
-- No external API calls except to the application's own backend.
-- Transaction data is never exported automatically — user must explicitly request data export (post-MVP feature).
-
-### Environment isolation
-- Local development uses `.env.local` with localhost database connection.
-- Production deployment (future) uses `.env.production` with Neon credentials.
-- No shared database between environments — local dev uses separate database instance.
+- Deleting a transaction requires explicit confirmation. No undo stack — deletions are permanent.
+- Editing a transaction shows what changed. The `updated_at` timestamp (if implemented) reflects modification.
+- Category deletion is blocked if transactions reference it. User must reassign transactions before deletion.
+- Filter state is explicit. The URL or UI clearly shows active filters (date range, category, type).
+- Error messages state the problem directly: "Category 'Rent' cannot be deleted because 12 transactions reference it."
 
 ---
 
-## 8) REST-first, simple endpoints, predictable behavior
+## 6) Decimal precision for money
 
-ForgeLedger Test uses RESTful conventions without over-engineering.
+Financial amounts are precise, not approximate.
 
-- Resource endpoints follow standard patterns: `GET /transactions`, `POST /transactions`, `GET /transactions/:id`, etc.
-- List endpoints support query parameters for filtering: `?type=income`, `?category_id=uuid`, `?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`.
-- Successful creates return `201 Created` with the created resource in response body.
-- Successful updates return `200 OK` with the updated resource.
-- Successful deletes return `204 No Content` with empty body.
-- Not found returns `404` with `{"error": "Transaction not found"}`.
-- Validation failures return `400` with detailed error messages.
+- All monetary amounts are stored as `DECIMAL(10,2)` — never `FLOAT`, never `INTEGER` cents.
+- Currency display rounds to two decimal places in the UI but preserves exact values in the database.
+- Balance calculations use decimal arithmetic. A running balance of $1000.00 minus $500.50 equals $499.50, exactly.
+- Totals and summaries are computed from transaction data, not cached or estimated.
 
-### No surprises
-- `GET` requests never mutate data.
-- `DELETE` requests are idempotent — deleting an already-deleted resource returns 404, not 500.
-- Filtering returns empty arrays if no matches, not null or errors.
+---
+
+## 7) Confirm-before-write (destructive actions only)
+
+ForgeLedger Test requires confirmation for actions that lose data.
+
+### Requires confirmation
+- Deleting a transaction
+- Deleting a category (if allowed by referential integrity)
+- Bulk actions (if implemented: "delete all filtered transactions")
+
+### No confirmation required
+- Creating a transaction (user is actively filling a form)
+- Editing a transaction (changes are explicit in the form)
+- Applying filters (read-only operation)
+- Creating a category (non-destructive)
+
+Confirmation dialogs state what will be lost:
+- "Delete transaction '$250.00 - Groceries' from 2024-12-15? This cannot be undone."
+
+---
+
+## 8) Privacy by default (future-proofing)
+
+ForgeLedger Test's MVP has no authentication, but privacy principles are embedded.
+
+- Financial data (transactions, categories) is stored only in the user's PostgreSQL instance.
+- No third-party analytics, tracking, or telemetry in MVP.
+- Database credentials are environment variables, never hardcoded.
+- If multi-user support is added later: transactions are scoped to user. No cross-user visibility, no shared categories by default.
+- If authentication is added: passwords are hashed (bcrypt/argon2), never stored plaintext.

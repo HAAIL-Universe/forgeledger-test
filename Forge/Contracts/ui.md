@@ -7,10 +7,8 @@ Canonical UI/UX specification for this project. The builder contract (S1) requir
 ## 1) App Shell & Layout
 
 ### Device priority
-- **Primary:** Desktop (1280px+)
-- **Secondary:** Tablet (768px - 1279px)
-- **Tertiary:** Mobile (320px - 767px)
-- **Responsive strategy:** Mobile-first with progressive enhancement. Single responsive layout adapts to all screen sizes.
+- **Primary:** Desktop
+- **Responsive strategy:** Desktop-first, responsive down to mobile (320px min). Single-column layout on mobile, two-column on tablet/desktop.
 
 ### Shell structure
 ```
@@ -18,195 +16,147 @@ Canonical UI/UX specification for this project. The builder contract (S1) requir
 |  HEADER (ForgeLedger logo, balance summary)      |
 +--------------------------------------------------+
 |                                                  |
-|  FILTERS BAR (type, category, date range)        |
+|  MAIN CONTENT AREA                               |
+|  (filters, summary cards, transaction table)     |
+|                                                  |
 |                                                  |
 +--------------------------------------------------+
-|                                                  |
-|  MAIN CONTENT AREA                               |
-|  (transaction list + floating action button)     |
-|                                                  |
-|                                                  |
-|                                                  |
+|  FOOTER (minimal, version info)                  |
 +--------------------------------------------------+
 ```
 
 ### Navigation model
-- **Primary nav:** Single-page application with no multi-page navigation
-- **Navigation items:** All functionality accessible from Dashboard via modals/panels
-- **Modal overlays:** Transaction form, Category management
-- **Filter panel:** Persistent at top of content area, collapsible on mobile
+- **Primary nav:** Single-page application (Dashboard only)
+- **Navigation items:** All functionality accessible from main dashboard via modals and inline components
+- **Secondary nav:** Category management accessible via header menu
 
 ---
 
 ## 2) Screens / Views
 
 ### Screen: Dashboard (Main View)
-- **Route:** `/` (root, only route)
+- **Route:** `/`
 - **Purpose:** Unified view of all financial transactions with filtering and summary
 - **Content:**
   - **Header section:**
-    - ForgeLedger Test logo (left)
-    - Current balance display (large, center-right): Shows net total (income - expenses)
-    - Balance breakdown: Total income / Total expenses (smaller text below balance)
-    - Settings icon (right): Opens category management modal
+    - App logo "ForgeLedger Test" (left)
+    - Current balance display (center, large, color-coded: green for positive, red for negative)
+    - "Manage Categories" button (right)
+    - "Add Transaction" button (primary, prominent, right)
+  
+  - **Summary cards section (below header):**
+    - Three cards in a row (stack on mobile):
+      - Total Income (current period, green accent)
+      - Total Expenses (current period, red accent)
+      - Net Balance (calculated, color-coded)
+    - Period selector dropdown (Month/Quarter/Year/All Time)
+  
   - **Filter bar:**
-    - Transaction type toggle: All / Income / Expense (pill buttons)
-    - Category dropdown: "All Categories" or specific category selection
-    - Date range picker: Quick options (This Month, Last Month, This Year, Custom) + calendar picker
-    - Clear filters button (visible when filters active)
-  - **Summary cards row (responsive grid):**
-    - Total Income (green accent)
-    - Total Expenses (red accent)
-    - Net Balance (blue accent)
-    - Transaction Count
-    - All cards show filtered totals when filters applied
-  - **Transaction list:**
-    - Reverse chronological order (newest first)
-    - Each transaction row shows:
-      - Date (left, formatted as "Jan 15, 2025")
-      - Type indicator (colored badge: green "Income" / red "Expense")
-      - Description (truncated to 2 lines on mobile)
-      - Category (pill badge)
-      - Amount (right-aligned, bold, color-coded: green for income, red for expense)
-      - Action menu (3-dot icon): Edit / Delete
-    - Running balance column (optional, toggle in settings)
-    - Empty state: "No transactions yet. Click + to add your first transaction."
-    - Pagination: Load more button at bottom (shows 50 transactions per page)
-  - **Floating Action Button (FAB):**
-    - Large + button (bottom right, fixed position)
-    - Opens "Add Transaction" modal
-    - Color: Primary blue, elevated shadow
+    - Transaction type filter (All/Income/Expense) - pill buttons
+    - Category dropdown (All Categories / specific category)
+    - Date range picker (From/To dates)
+    - Clear filters button
+    - Results count display ("Showing 45 transactions")
+  
+  - **Transaction table/list:**
+    - Columns (desktop): Date | Description | Category | Amount | Type | Actions
+    - Mobile view: Card layout showing same info stacked
+    - Each row shows:
+      - Date (formatted: MMM DD, YYYY)
+      - Description (truncated at 50 chars with tooltip)
+      - Category badge (colored pill based on category)
+      - Amount (formatted: $X,XXX.XX, color-coded: green for income, red for expense)
+      - Type icon (↑ for income, ↓ for expense)
+      - Actions: Edit icon, Delete icon
+    - Rows sorted by date (newest first) by default
+    - Click column header to sort by that column
+    - Pagination at bottom (50 transactions per page)
+  
+  - **Empty state (no transactions):**
+    - Centered icon (ledger book)
+    - "No transactions yet"
+    - "Click 'Add Transaction' to record your first income or expense"
+    - Large "Add Transaction" button
+
 - **Actions:**
-  - Click FAB -> Open "Add Transaction" modal
-  - Click transaction row -> Open "Edit Transaction" modal (pre-filled)
-  - Click 3-dot menu -> Show Edit/Delete options
-  - Click Delete -> Show confirmation dialog
-  - Click category dropdown -> Show category list with type filtering
-  - Click date picker -> Open calendar interface
-  - Click settings icon -> Open "Category Management" modal
-  - Apply filters -> List refreshes with filtered results + summary cards update
-  - Clear filters -> Reset to all transactions
-- **Reached via:** Application root, only screen in app
+  - Click "Add Transaction" -> open Add Transaction Modal
+  - Click Edit icon -> open Edit Transaction Modal (pre-filled)
+  - Click Delete icon -> open Delete Confirmation Dialog
+  - Click "Manage Categories" -> open Category Management Modal
+  - Change any filter -> table updates immediately
+  - Change period selector -> summary cards update immediately
+  - Click pagination controls -> load next/previous page
+
+- **Reached via:** Direct URL, application entry point
 
 ### Modal: Add/Edit Transaction
-- **Route:** N/A (modal overlay on Dashboard)
+- **Route:** N/A (modal overlay)
 - **Purpose:** Create new transaction or edit existing one
 - **Content:**
-  - Modal title: "Add Transaction" or "Edit Transaction"
-  - Close button (X, top right)
-  - **Form fields (vertical layout):**
-    - Transaction type selector (required): Radio buttons "Income" / "Expense"
-      - Visual design: Large, clear buttons with icons ($ up / $ down)
-      - Selected state highlighted with color (green/red)
-    - Amount input (required):
-      - Number input with 2 decimal places
-      - Large font size, prominent
-      - Currency symbol prefix ($)
-      - Validation: Must be > 0
-    - Date picker (required):
-      - Defaults to today
-      - Calendar icon, opens date picker overlay
-      - Format: YYYY-MM-DD (displayed as "Jan 15, 2025")
-    - Category dropdown (required):
-      - Filtered by selected transaction type
-      - Shows only income categories when Income selected, expense categories when Expense selected
-      - Placeholder: "Select category"
-      - Option to "Create new category" at bottom of list
-    - Description text area (optional):
-      - Multi-line text input
-      - Placeholder: "Add notes or details about this transaction"
-      - Character limit: 500 characters
-      - Character counter displayed
-  - **Action buttons (bottom):**
-    - Cancel (secondary button, left)
-    - Save (primary button, right, disabled until required fields valid)
+  - Modal header: "Add Transaction" or "Edit Transaction"
+  - Form fields:
+    - **Type selector** (required): Radio buttons for "Income" / "Expense" (changes category dropdown options)
+    - **Amount** (required): Number input, prefix with "$", decimal validation (max 2 decimal places)
+    - **Date** (required): Date picker, defaults to today
+    - **Category** (required): Dropdown filtered by selected type (income/expense categories)
+    - **Description** (optional): Multi-line text area, max 500 characters, character counter shown
+  - Validation messages inline under each field
+  - Action buttons at bottom:
+    - "Cancel" (secondary, left)
+    - "Save Transaction" (primary, right, disabled until valid)
+
 - **Actions:**
-  - Toggle transaction type -> Category dropdown updates to show relevant categories
-  - Select date -> Calendar closes, date populates field
-  - Click "Create new category" -> Opens inline category creation mini-form
-  - Click Save -> Validate fields -> POST/PUT to API -> Close modal -> Refresh transaction list -> Show success toast
-  - Click Cancel -> Close modal without saving (confirmation if form dirty)
-- **Validation:**
-  - Amount: Required, numeric, > 0, max 10 digits
-  - Date: Required, valid date, not future date
-  - Category: Required selection
-  - Type: Required selection
-  - Inline validation with error messages below fields
-  - Submit button disabled until all required fields valid
-- **Reached via:** FAB click (add mode), Transaction row click (edit mode), Edit action from 3-dot menu
+  - Select Type -> filters category dropdown
+  - Fill form fields -> enable/disable Save button based on validation
+  - Click "Save Transaction" -> POST/PUT to API -> close modal -> refresh transaction list -> show success toast
+  - Click "Cancel" -> close modal without saving
+  - Validation errors -> inline red text under field
+
+- **Reached via:** "Add Transaction" button (empty form), Edit icon (pre-filled form)
 
 ### Modal: Category Management
-- **Route:** N/A (modal overlay on Dashboard)
+- **Route:** N/A (modal overlay)
 - **Purpose:** View, create, edit, and delete transaction categories
 - **Content:**
-  - Modal title: "Manage Categories"
-  - Close button (X, top right)
-  - **Tab navigation:**
-    - Income Categories tab
-    - Expense Categories tab
+  - Modal header: "Manage Categories"
+  - Two tabs: "Income Categories" / "Expense Categories"
   - **Category list (per tab):**
-    - Each category shows:
+    - List of categories, each showing:
       - Category name
-      - Usage count (e.g., "12 transactions")
-      - Edit icon button
-      - Delete icon button (disabled if category in use)
-    - Empty state: "No [income/expense] categories yet. Create one below."
-  - **Add category form (bottom of list):**
-    - Category name input (required)
-    - Add button
-    - Inline validation
-  - **Edit inline:**
-    - Click edit icon -> Category name becomes editable input
-    - Save/Cancel buttons appear
+      - Usage count (e.g., "Used in 12 transactions")
+      - Edit icon
+      - Delete icon (disabled if category in use)
+  - **Add new category section (at top):**
+    - Text input: "New category name"
+    - "Add Category" button (adds to current tab's type)
+  - Empty state per tab: "No [income/expense] categories yet. Add one above."
+
 - **Actions:**
-  - Switch tabs -> Show categories for selected type
-  - Type in "Add category" input -> Enable Add button
-  - Click Add -> POST to /categories -> Refresh list -> Clear input -> Show success toast
-  - Click Edit icon -> Enable inline editing for that category
-  - Save edited name -> PUT to /categories/:id -> Refresh list -> Show success toast
-  - Cancel edit -> Revert to original name
-  - Click Delete -> Show confirmation dialog (if no transactions) -> DELETE to /categories/:id -> Refresh list
-  - Click Delete (disabled) -> Show tooltip "Cannot delete category in use"
-- **Validation:**
-  - Category name: Required, max 100 characters, unique within type
-  - Cannot delete category with associated transactions
-- **Reached via:** Settings icon in Dashboard header
+  - Switch tabs -> show income or expense categories
+  - Type in "New category name" + click "Add Category" -> POST to /categories -> add to list -> clear input -> show success toast
+  - Click Edit icon -> inline edit mode (name becomes editable input), Save/Cancel buttons appear
+  - Click Save (inline edit) -> PUT to /categories/:id -> update list
+  - Click Delete icon -> show confirmation dialog ("This category is used in X transactions. Are you sure?") -> DELETE to /categories/:id -> remove from list
+  - Click "Close" or outside modal -> close modal
+
+- **Reached via:** "Manage Categories" button in header
 
 ### Dialog: Delete Confirmation
 - **Route:** N/A (dialog overlay)
-- **Purpose:** Confirm destructive actions (delete transaction, delete category)
+- **Purpose:** Confirm destructive actions (delete transaction or category)
 - **Content:**
   - Title: "Delete Transaction?" or "Delete Category?"
   - Message: "This action cannot be undone. Are you sure you want to delete this [transaction/category]?"
-  - For transactions: Show transaction details (date, amount, description)
-  - For categories: Show category name and warning if in use
+  - For category deletion: Additional warning if category is in use: "This category is used in X transactions. Deleting it will remove the category from those transactions."
   - Action buttons:
-    - Cancel (secondary, left)
-    - Delete (danger red, right)
-- **Actions:**
-  - Click Cancel -> Close dialog, no action taken
-  - Click Delete -> Execute DELETE request -> Close dialog -> Refresh data -> Show success toast
-- **Reached via:** Delete action from transaction 3-dot menu, Delete button in category management
+    - "Cancel" (secondary, left)
+    - "Delete" (danger/red, right)
 
-### Component: Transaction Filters (Persistent Panel)
-- **Location:** Top of Dashboard, below header
-- **Purpose:** Filter transaction list by type, category, and date range
-- **Content:**
-  - Horizontal layout (wraps on mobile)
-  - Type filter: Pill buttons (All / Income / Expense)
-  - Category filter: Dropdown with search
-  - Date range filter: Dropdown with presets + custom range option
-  - Active filter badges (removable with X)
-  - Clear all button (visible when any filter active)
 - **Actions:**
-  - Select type -> Update list immediately
-  - Select category -> Update list immediately
-  - Select date range -> Update list immediately
-  - Click filter badge X -> Remove that filter -> Update list
-  - Click Clear all -> Reset all filters -> Update list
-- **State:**
-  - Filters persist in URL query params (shareable, bookmarkable)
-  - Filter state saved to localStorage for session persistence
+  - Click "Delete" -> DELETE to API -> close dialog -> refresh list -> show success toast
+  - Click "Cancel" or outside dialog -> close dialog without action
+
+- **Reached via:** Delete icon click on transaction row or category item
 
 ---
 
@@ -214,285 +164,225 @@ Canonical UI/UX specification for this project. The builder contract (S1) requir
 
 | Component | Used on | Description |
 |-----------|---------|-------------|
-| Header | Dashboard | App logo, balance summary, settings icon |
-| BalanceCard | Dashboard | Large display of current balance with breakdown |
-| SummaryCard | Dashboard | Metric card showing total income/expenses/balance/count |
-| FilterBar | Dashboard | Horizontal bar with type toggle, category dropdown, date picker |
-| FilterBadge | FilterBar | Removable pill showing active filter |
-| TransactionList | Dashboard | Scrollable list of transaction rows with pagination |
-| TransactionRow | TransactionList | Single transaction entry with date, type, amount, category, actions |
-| TypeBadge | TransactionRow, TransactionForm | Colored pill showing "Income" or "Expense" |
-| CategoryBadge | TransactionRow | Pill showing category name |
-| ActionMenu | TransactionRow | 3-dot menu with Edit/Delete options |
-| FloatingActionButton | Dashboard | Circular + button fixed to bottom-right |
-| TransactionModal | Dashboard | Modal dialog for add/edit transaction form |
-| TransactionForm | TransactionModal | Form with type selector, amount, date, category, description |
+| BalanceDisplay | Dashboard header | Large, color-coded current balance (green/red) |
+| SummaryCard | Dashboard summary section | Card showing metric (income/expenses/net), value, color accent |
+| PeriodSelector | Dashboard summary section | Dropdown to select time period (Month/Quarter/Year/All Time) |
+| FilterBar | Dashboard | Horizontal bar with type pills, category dropdown, date range picker, clear button |
+| TransactionTable | Dashboard | Responsive table/card list of transactions with sorting |
+| TransactionRow | TransactionTable | Single transaction row with date, description, category, amount, type, actions |
+| CategoryBadge | TransactionRow, Filter | Colored pill showing category name |
+| TypeIcon | TransactionRow | Up/down arrow icon for income/expense |
+| ActionButtons | TransactionRow | Edit and Delete icon buttons |
+| Pagination | Dashboard | Page controls for transaction list |
+| TransactionModal | Dashboard | Modal form for add/edit transaction |
 | CategoryModal | Dashboard | Modal for category management with tabs |
 | CategoryList | CategoryModal | List of categories with edit/delete actions |
-| CategoryForm | CategoryModal | Inline form for adding new category |
-| ConfirmDialog | All screens | Generic confirmation dialog for destructive actions |
-| DatePicker | TransactionForm, FilterBar | Calendar interface for date selection |
-| Dropdown | FilterBar, TransactionForm, CategoryModal | Searchable dropdown selector |
-| Toast | All screens | Temporary notification for success/error messages |
-| EmptyState | Dashboard, CategoryModal | Friendly message + action when no data |
-| Skeleton | Dashboard | Loading placeholder for transaction list |
-| Pagination | Dashboard | Load more button with loading indicator |
+| InlineEdit | CategoryList | Component for inline editing of category names |
+| ConfirmDialog | Throughout | Generic confirmation dialog for destructive actions |
+| EmptyState | Dashboard, CategoryModal | Friendly message + call-to-action when no data |
+| Toast | Global | Transient notification for success/error messages |
+| DatePicker | TransactionModal, FilterBar | Calendar widget for date selection |
+| AmountInput | TransactionModal | Formatted number input with currency prefix |
 
 ---
 
 ## 4) Visual Style
 
 ### Color palette
-- **Primary:** Financial blue (#2563EB) - buttons, links, accents
-- **Success/Income:** Green (#10B981) - income badges, positive numbers, income type selector
-- **Danger/Expense:** Red (#EF4444) - expense badges, negative numbers, expense type selector, delete actions
-- **Warning:** Amber (#F59E0B) - warnings, alerts
-- **Neutral background:** White (#FFFFFF) main, light gray (#F9FAFB) secondary surfaces
-- **Borders:** Light gray (#E5E7EB)
-- **Text primary:** Dark slate (#111827)
-- **Text secondary:** Medium gray (#6B7280)
-- **Text tertiary:** Light gray (#9CA3AF)
+- **Primary:** Teal/Blue-green (#0D9488 teal-600)
+- **Background:** Light gray (#F9FAFB gray-50)
+- **Surface:** White (#FFFFFF)
+- **Borders:** Gray-200 (#E5E7EB)
+- **Income accent:** Green (#10B981 emerald-500)
+- **Expense accent:** Red (#EF4444 red-500)
+- **Positive balance:** Green-600 (#059669)
+- **Negative balance:** Red-600 (#DC2626)
+- **Text primary:** Gray-900 (#111827)
+- **Text secondary:** Gray-600 (#4B5563)
+- **Text muted:** Gray-400 (#9CA3AF)
 
 ### Typography
-- **Font family:** Inter, system-ui, -apple-system, sans-serif
-- **Scale:**
-  - Display (balance): 48px/3rem, bold
-  - H1 (modal titles): 24px/1.5rem, semibold
-  - H2 (section headers): 20px/1.25rem, semibold
-  - H3 (card titles): 16px/1rem, medium
-  - Body: 14px/0.875rem, regular
-  - Small: 12px/0.75rem, regular
-  - Amount (transaction list): 16px/1rem, bold
-- **Line height:** 1.5 for body text, 1.2 for headings
+- **Font family:** System font stack (Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)
+- **Scale:** 
+  - Balance display: 3rem (48px), bold
+  - Section headers: 1.5rem (24px), semibold
+  - Body text: 1rem (16px), regular
+  - Small text: 0.875rem (14px), regular
+  - Labels: 0.75rem (12px), medium, uppercase, letter-spacing
 
 ### Visual density
-- **Comfortable:** Adequate whitespace for financial data clarity
-- **Spacing scale:** 4px base unit (4, 8, 12, 16, 24, 32, 48, 64px)
-- **Card padding:** 24px
-- **List item height:** 64px (desktop), 80px (mobile for touch targets)
-- **Modal width:** 600px max (90vw on mobile)
+- Comfortable -- clear spacing between elements, generous padding in cards and modals
+- Table rows: 48px height minimum
+- Cards: 16px padding
+- Modal content: 24px padding
 
 ### Tone
-- **Professional yet approachable:** Clean, modern financial interface
-- **Data-focused:** Clear hierarchy, scannable numbers
-- **Minimalist:** No decorative elements, functional design
-- **Confidence-inspiring:** Consistent spacing, clear typography, reliable interactions
+- Clean, minimal, functional
+- Financial/professional aesthetic
+- Clear visual hierarchy
+- Focus on readability of numbers and data
 
 ---
 
 ## 5) Interaction Patterns
 
 ### Data loading
-- **Initial page load:**
-  - Show skeleton loaders for transaction list (5 rows)
-  - Summary cards show with placeholder shimmer
-  - Header balance shows "—" until loaded
-- **Filter changes:**
-  - Instant update with 200ms debounce on text inputs
-  - Dropdown/date selections apply immediately
-  - Show loading spinner overlay on transaction list
-  - Summary cards fade and update
-- **Infinite scroll/pagination:**
-  - "Load more" button at bottom of list
-  - Button shows spinner when loading
-  - Smooth insertion of new rows
-- **Action feedback:**
-  - Button shows spinner replacing text during API call
-  - Optimistic UI updates (transaction appears immediately, rolled back on error)
+- Initial page load: Full-page skeleton loader matching table/card structure
+- Filter changes: Inline loading state on table (semi-transparent overlay with spinner)
+- Modal save actions: Button shows spinner, text changes to "Saving..."
+- No skeleton loaders for modals (they open instantly with data)
 
 ### Empty states
-- **No transactions:**
-  - Centered icon (ledger book illustration)
-  - Heading: "No transactions yet"
-  - Subtext: "Start tracking your finances by adding your first transaction"
-  - Large "Add Transaction" button
-- **No filtered results:**
-  - Centered icon (magnifying glass)
-  - Heading: "No transactions match your filters"
-  - Subtext: "Try adjusting your filters or clearing them to see all transactions"
-  - "Clear filters" button
-- **No categories:**
-  - Centered icon (folder)
-  - Heading: "No [income/expense] categories yet"
-  - Subtext: "Create a category to organize your transactions"
-  - Inline add category form visible
+- **No transactions:** Centered illustration + message + primary CTA button
+- **No filtered results:** "No transactions match your filters. Try adjusting your search criteria." + "Clear Filters" button
+- **No categories (per type):** "No [income/expense] categories yet. Add one above to get started."
 
 ### Error states
-- **Form validation errors:**
-  - Inline error messages below invalid fields (red text, small)
-  - Red border on invalid input
-  - Error icon next to field
-  - Submit button disabled with tooltip explaining why
-- **API errors:**
-  - Toast notification for transient errors: "Failed to load transactions. Please try again."
-  - Retry button in toast
-  - For critical errors: Error state component with retry button replacing content
-- **Network offline:**
-  - Banner at top: "You're offline. Changes will sync when connection restores."
-  - Disable add/edit/delete actions with tooltip
+- **Network errors:** Toast notification (red) at top: "Connection error. Please check your network and try again."
+- **Validation errors:** Inline red text under invalid field + field border turns red
+- **API errors:** Toast notification with specific error message from API
+- **Delete failures:** Toast notification: "Could not delete [item]. It may be in use."
 
 ### Confirmation pattern
-- **Delete transaction:**
-  - Modal dialog required
-  - Shows transaction details
-  - Two-step: Click delete icon -> confirmation dialog appears
-- **Delete category:**
-  - Modal dialog required only if category has transactions
-  - If no transactions, immediate delete with undo toast
-- **Discard unsaved changes:**
-  - Modal dialog if form is "dirty" and user clicks Cancel/Close
-  - "You have unsaved changes. Discard them?" with Stay/Discard buttons
-- **No confirmation needed:**
-  - Editing transaction (auto-save option disabled for now)
-  - Applying filters
-  - Navigation (no routes to navigate between)
+- **Destructive actions only:** Delete transaction, delete category
+- **No confirmation for:** Save actions, edit actions, filter changes, navigation
+- **Confirmation dialog style:** Modal overlay with clear messaging and prominent Cancel option
 
 ### Responsive behavior
-- **Desktop (1280px+):**
-  - Summary cards: 4 columns
-  - Transaction list: Full table layout with all columns visible
-  - Filters: Single horizontal row
-  - Modal: 600px width, centered
-- **Tablet (768px - 1279px):**
-  - Summary cards: 2 columns
-  - Transaction list: Table with running balance column hidden
-  - Filters: Wrapped layout, 2 per row
-  - Modal: 90vw width, centered
-- **Mobile (320px - 767px):**
-  - Summary cards: 1 column, stacked
-  - Transaction list: Card layout (each transaction is a card)
-  - Filters: Collapsible accordion, stacked vertically
-  - Modal: Full screen with slide-up animation
-  - FAB: Larger touch target (56px)
-  - Transaction cards show:
-    - Date + type badge (top row)
-    - Description (truncated, middle)
-    - Category badge + amount (bottom row)
-    - 3-dot menu (top right)
+- **Desktop (≥1024px):**
+  - Full table layout
+  - Summary cards in 3-column row
+  - Modals centered at 600px max-width
+  
+- **Tablet (768px-1023px):**
+  - Table remains but slightly compressed
+  - Summary cards in 3-column row (narrower)
+  - Filter bar may wrap to two rows
+  
+- **Mobile (<768px):**
+  - Transaction table becomes card list (one card per transaction)
+  - Summary cards stack vertically
+  - Filter bar stacks vertically
+  - Modal becomes full-width with top/bottom padding
+  - Category management tabs become dropdown selector
 
-### Animation & transitions
-- **Modal open/close:** 200ms ease-in-out fade + scale
-- **Dropdown open:** 150ms ease-out slide-down
-- **Filter apply:** 200ms fade on list update
-- **Toast notifications:** Slide in from top, auto-dismiss after 5s
-- **Button states:** 100ms ease on hover/active
-- **List item hover:** Background color transition 100ms
-- **FAB hover:** Scale 1.05 + shadow elevation increase
-- **All transitions:** Respect prefers-reduced-motion
+### Form behavior
+- **Real-time validation:** Fields validate on blur or on change (after first blur)
+- **Disabled state:** Save button disabled until all required fields valid
+- **Auto-focus:** First field auto-focused when modal opens
+- **Enter key:** Submits form if all fields valid
+- **Escape key:** Closes modal/dialog (with unsaved changes warning if applicable)
+
+### Table/List interactions
+- **Sorting:** Click column header to sort ascending, click again for descending, third click removes sort
+- **Default sort:** Date descending (newest first)
+- **Row hover:** Subtle background color change + action icons become visible
+- **No row selection:** No checkboxes or multi-select (edit/delete are per-row actions)
 
 ---
 
 ## 6) User Flows
 
-### Flow 1: First-time user adds first transaction
-1. User lands on Dashboard
-2. Sees empty state: "No transactions yet" with large "Add Transaction" button
-3. Clicks "Add Transaction" button (or FAB)
-4. Modal opens: "Add Transaction"
-5. User sees form requires category but no categories exist
-6. Clicks "Create new category" link in category dropdown
-7. Inline mini-form appears: "Category name" input
-8. User types "Salary" and clicks Add
-9. Category created, dropdown now shows "Salary" (selected)
-10. User selects "Income" type (radio button)
-11. Amount field highlighted, user types "5000"
-12. Date defaults to today, user keeps it
-13. Description optional, user types "Monthly salary - January"
-14. Save button enabled (all required fields valid)
-15. User clicks Save
-16. Modal closes, transaction appears in list
-17. Summary cards update: Total Income $5,000, Balance $5,000
-18. Success toast: "Transaction added successfully"
+### Flow 1: Adding an Expense Transaction
+1. User lands on Dashboard (sees existing transactions or empty state)
+2. User clicks "Add Transaction" button in header
+3. Add Transaction Modal opens, empty form, "Income" radio pre-selected
+4. User selects "Expense" radio button
+5. Category dropdown updates to show only expense categories
+6. User enters amount: "45.99"
+7. User selects date (defaults to today, user changes to yesterday)
+8. User selects category: "Groceries" from dropdown
+9. User enters description: "Weekly grocery shopping at Whole Foods"
+10. "Save Transaction" button becomes enabled (all required fields filled)
+11. User clicks "Save Transaction"
+12. Button shows loading spinner, text changes to "Saving..."
+13. API call succeeds (POST /transactions)
+14. Modal closes
+15. Dashboard table refreshes, new transaction appears at top (sorted by date)
+16. Success toast appears: "Transaction added successfully"
+17. Summary cards update to reflect new expense
 
-### Flow 2: User reviews monthly expenses
-1. User opens Dashboard, sees full transaction list (income + expenses mixed)
-2. Clicks "Expense" pill in filter bar
-3. List instantly updates to show only expenses
-4. Summary cards update to show filtered totals
-5. User clicks date range dropdown
-6. Selects "This Month" preset
-7. List updates to show only this month's expenses
-8. Active filter badges appear: "Expense" and "Jan 2025"
-9. User scans list, sees high spending in "Dining" category
-10. Clicks category dropdown in filter bar
-11. Searches "Dining" in dropdown
-12. Selects "Dining" category
-13. List now shows only dining expenses this month
-14. Summary shows: Total Expenses $450 (filtered)
-15. User notes need to reduce dining spend
-16. Clicks "Clear filters" button
-17. All filters removed, full list restored
+### Flow 2: Filtering Transactions by Category and Date
+1. User is on Dashboard with multiple transactions visible
+2. User wants to see only "Salary" income transactions from last month
+3. User clicks "Income" pill button in filter bar (Expense pill becomes inactive)
+4. Table updates immediately showing only income transactions
+5. User clicks Category dropdown, selects "Salary"
+6. Table updates showing only salary transactions
+7. User clicks "From" date picker, selects first day of last month
+8. User clicks "To" date picker, selects last day of last month
+9. Table updates showing only salary transactions within date range
+10. Results count updates: "Showing 4 transactions"
+11. User reviews filtered list
+12. User clicks "Clear Filters" button
+13. All filters reset, table shows all transactions again
 
-### Flow 3: User edits incorrect transaction amount
-1. User browsing transaction list
-2. Notices transaction with wrong amount: "Coffee - $50" (should be $5)
-3. Clicks transaction row (entire row is clickable)
-4. Edit Transaction modal opens, pre-filled with transaction data
-5. Amount field shows "50.00"
-6. User clicks amount field, clears it, types "5"
-7. Save button enabled (validation passes)
-8. User clicks Save
-9. Modal closes
-10. Transaction row updates in place with new amount: "$5.00"
-11. Summary cards update: Balance increases by $45
-12. Success toast: "Transaction updated successfully"
-13. User visually confirms change in list
+### Flow 3: Creating and Using a New Category
+1. User clicks "Add Transaction" button
+2. Realizes needed category doesn't exist
+3. User clicks "Cancel" to close transaction modal
+4. User clicks "Manage Categories" button in header
+5. Category Management Modal opens, "Income Categories" tab active
+6. User sees existing income categories: Salary, Freelance
+7. User switches to "Expense Categories" tab
+8. User sees existing expense categories: Groceries, Utilities, Entertainment
+9. User types "Transportation" in "New category name" input
+10. User clicks "Add Category" button
+11. "Transportation" appears in expense categories list with "Used in 0 transactions"
+12. Success toast: "Category added successfully"
+13. User clicks "Close" button on modal
+14. User clicks "Add Transaction" button again
+15. User selects "Expense" type
+16. Category dropdown now includes "Transportation"
+17. User completes transaction with new category
+18. User saves transaction successfully
 
-### Flow 4: User deletes duplicate transaction
-1. User spots duplicate transaction in list (same date, amount, description)
-2. Clicks 3-dot action menu on duplicate transaction row
-3. Dropdown menu appears: "Edit" and "Delete" options
-4. User clicks "Delete"
-5. Confirmation dialog appears: "Delete Transaction?"
-6. Dialog shows transaction details for confirmation
-7. Warning text: "This action cannot be undone."
-8. User clicks "Delete" button (red, danger styling)
-9. Dialog closes
-10. Transaction row fades out and removes from list (300ms animation)
-11. Summary cards update: Balance and count adjust
-12. Success toast: "Transaction deleted successfully"
-13. List scrolls if needed to maintain position
+### Flow 4: Editing a Transaction After Discovering an Error
+1. User scrolls through Dashboard transaction list
+2. User notices an expense has wrong amount ($45.99 instead of $54.99)
+3. User hovers over the transaction row (action icons appear)
+4. User clicks Edit icon (pencil)
+5. Edit Transaction Modal opens with form pre-filled:
+   - Type: Expense
+   - Amount: 45.99
+   - Date: (original date)
+   - Category: Groceries
+   - Description: "Weekly grocery shopping at Whole Foods"
+6. User clicks into Amount field, changes to "54.99"
+7. "Save Transaction" button is enabled
+8. User clicks "Save Transaction"
+9. Button shows loading spinner
+10. API call succeeds (PUT /transactions/:id)
+11. Modal closes
+12. Transaction row updates in table with new amount
+13. Success toast: "Transaction updated successfully"
+14. Summary cards update to reflect corrected amount
 
 ---
 
 ## 7) What This Is NOT
 
-### Explicitly out of scope (do NOT build these features):
-
-- **Multi-user accounts:** No user authentication, no login/logout, single-user local usage only
-- **Data export/import:** No CSV export, no PDF reports, no data import from banks or other apps
-- **Recurring transactions:** No ability to set up recurring income/expenses or templates
-- **Budgeting:** No budget planning, no spending limits, no budget vs. actual comparisons
-- **Bank account sync:** No integration with real bank accounts, no automatic transaction import
-- **Multi-currency:** Only supports single currency (default $), no currency conversion
-- **Attachments:** No ability to attach receipts, invoices, or files to transactions
-- **Tags:** Categories only, no free-form tagging system
-- **Search:** No full-text search across transactions (filters only)
-- **Charts/graphs:** No data visualization, no spending trends, no pie charts (MVP is table-only)
-- **Mobile apps:** Web application only, no native iOS/Android apps
-- **Notifications:** No email/push notifications for any events
-- **Audit trail:** No transaction edit history or change tracking
-- **Collaboration:** No sharing, no multi-user access, no permissions
-- **Advanced filtering:** No saved filter presets, no complex boolean filter logic
-- **Batch operations:** No bulk delete, no bulk edit, no multi-select
-- **Dark mode:** Single light theme only for MVP
-- **Accessibility features beyond basics:** WCAG AA compliance not guaranteed in MVP
-- **Offline mode:** No service worker, no offline data caching, requires internet connection
-- **Undo/redo:** No transaction undo stack (only delete confirmation)
-- **Transaction splits:** Cannot split single transaction across multiple categories
-- **Transfer between accounts:** No concept of multiple accounts or transfers
-- **Tax reporting:** No tax category mapping, no tax year summaries
-- **Payment methods:** No tracking of cash/card/bank payment methods
-
-### Design constraints:
-- Single dashboard page only, no multi-page navigation
-- Maximum 100 categories per type (income/expense)
-- Maximum 10,000 transactions total (pagination required beyond 1,000 visible)
-- No real-time collaboration or concurrent editing safeguards
-- No transaction locking mechanism
-- Form validation is client-side only (backend validation assumed)
-- No internationalization (English only, USD only)
+### Explicitly out of scope for MVP:
+- **Multi-user support:** No user accounts, authentication, or multi-tenancy. Single-user local application.
+- **Budgeting features:** No budget setting, budget tracking, or overspending alerts.
+- **Recurring transactions:** No ability to set up automatic recurring entries (e.g., monthly rent).
+- **Attachments/receipts:** No file upload or receipt image storage.
+- **Reports/analytics:** No charts, graphs, trend analysis, or detailed reporting beyond basic summary cards.
+- **Export/import:** No CSV/Excel export or import functionality.
+- **Search functionality:** No full-text search across transactions (only filtering by structured fields).
+- **Transaction tags:** No tagging system beyond single category assignment.
+- **Multi-currency:** Single currency only (assumed USD), no currency conversion.
+- **Mobile app:** Web-only, no native mobile applications.
+- **Bulk operations:** No multi-select or bulk edit/delete of transactions.
+- **Audit trail:** No change history or audit log for edited transactions.
+- **Advanced filtering:** No saved filter sets, no complex query builder (only simple AND filtering).
+- **Data insights:** No AI/ML-powered insights, spending predictions, or financial advice.
+- **Integration:** No bank account integration, no API for external tools.
+- **Collaboration:** No sharing, commenting, or multi-user workflows.
+- **Tax features:** No tax category mapping, no tax reporting or export.
+- **Account reconciliation:** No bank statement reconciliation features.
+- **Backup/sync:** No cloud backup, no cross-device sync (local database only).
 
 ---
 
-**END OF UI/UX BLUEPRINT**
+**End of UI/UX Blueprint**
