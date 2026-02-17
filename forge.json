@@ -1,0 +1,77 @@
+{
+  "project_name": "ForgeLedger Test",
+  "version": "1.0.0",
+  "description": "Lightweight financial ledger for tracking income and expenses",
+  "backend": {
+    "language": "python",
+    "version": "3.11+",
+    "framework": "fastapi",
+    "entry_module": "app.main",
+    "entry_point": "app",
+    "test_framework": "pytest",
+    "test_dir": "tests",
+    "test_command": "pytest tests/ -v --cov=app --cov-report=term-missing",
+    "dependency_file": "requirements.txt",
+    "venv_path": ".venv",
+    "python_path": "PYTHONPATH=.",
+    "dev_server": {
+      "command": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+      "port": 8000
+    }
+  },
+  "database": {
+    "engine": "postgresql",
+    "version": "15+",
+    "host": "neon",
+    "driver": "asyncpg",
+    "migrations_dir": "db/migrations",
+    "schema_file": "db/schema.sql",
+    "seed_file": "db/seed.sql"
+  },
+  "frontend": {
+    "enabled": true,
+    "language": "typescript",
+    "framework": "react",
+    "build_tool": "vite",
+    "dir": "web",
+    "entry_point": "src/main.tsx",
+    "build_cmd": "npm run build",
+    "dev_cmd": "npm run dev",
+    "test_cmd": "npm run test",
+    "test_framework": "vitest",
+    "dist_dir": "dist",
+    "dev_server": {
+      "port": 5173
+    }
+  },
+  "api": {
+    "style": "REST",
+    "prefix": "/api",
+    "documentation": "/docs",
+    "version": "v1"
+  },
+  "deployment": {
+    "platform": "render",
+    "type": "web_service",
+    "region": "oregon",
+    "plan": "free",
+    "health_check_path": "/health",
+    "build_command": "pip install -r requirements.txt && cd web && npm install && npm run build",
+    "start_command": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+  },
+  "features": {
+    "authentication": false,
+    "authorization": false,
+    "websockets": false,
+    "background_jobs": false,
+    "file_uploads": false,
+    "email": false
+  },
+  "code_quality": {
+    "backend_linter": "ruff",
+    "backend_formatter": "black",
+    "frontend_linter": "eslint",
+    "frontend_formatter": "prettier",
+    "type_checker": "mypy"
+  }
+}
