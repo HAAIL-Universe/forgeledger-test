@@ -1,334 +1,148 @@
-"""Pytest fixtures for ForgeLedger Test backend test suite.
-
-Provides:
-- Async test database connection pool (isolated from production)
-- HTTPX async client wired to the FastAPI test application
-- Database cleanup between tests for isolation
-- Test application instance with overridden settings
-
-All fixtures use function scope by default to ensure test isolation.
-Session-scoped fixtures are used for expensive resources like connection pools.
 """
+Pytest configuration and shared fixtures for ForgeLedger Test.
 
-from __future__ import annotations
+Provides database connection fixtures, test client setup, and common
+test data factories for repository, service, and API integration tests.
+"""
 
 import asyncio
 import os
+import uuid
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock
 
-import asyncpg
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
-# ---------------------------------------------------------------------------
-# Ensure test environment variables are set before any app imports
-# ---------------------------------------------------------------------------
-os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("DATABASE_URL", os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql://localhost:5432/forgeledger_test",
-))
-os.environ.setdefault("LOG_LEVEL", "WARNING")
-os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
-os.environ.setdefault("DB_POOL_MIN_SIZE", "1")
-os.environ.setdefault("DB_POOL_MAX_SIZE", "5")
-os.environ.setdefault("DEBUG", "true")
-os.environ.setdefault("RELOAD", "false")
 
 
 # ---------------------------------------------------------------------------
-# Event loop fixture — session-scoped for asyncpg pool reuse
+# Event loop fixture for async tests
 # ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create a single event loop for the entire test session.
-
-    This avoids re-creating the loop per test which can cause issues with
-    session-scoped async fixtures like the database pool.
-    """
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
+    """Create a single event loop for the entire test session."""
+    loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
 # ---------------------------------------------------------------------------
-# Database connection pool — session-scoped
+# Environment setup
 # ---------------------------------------------------------------------------
 
-
-@pytest_asyncio.fixture(scope="session")
-async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
-    """Create a session-scoped asyncpg connection pool for tests.
-
-    The pool connects to the database specified by ``DATABASE_URL`` (or
-    ``TEST_DATABASE_URL`` if set). It is created once for the entire test
-    session and closed at teardown.
-
-    Yields:
-        An ``asyncpg.Pool`` instance ready for query execution.
-    """
-    database_url = os.environ.get(
-        "TEST_DATABASE_URL",
-        os.environ["DATABASE_URL"],
-    )
-
-    pool: asyncpg.Pool = await asyncpg.create_pool(
-        dsn=database_url,
-        min_size=1,
-        max_size=5,
-        command_timeout=30,
-    )
-
-    yield pool
-
-    await pool.close()
+@pytest.fixture(autouse=True)
+def set_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure tests run with test environment settings."""
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    # Use a dummy DATABASE_URL so config doesn't fail if the var is missing
+    if not os.environ.get("DATABASE_URL"):
+        monkeypatch.setenv(
+            "DATABASE_URL",
+            "postgresql://test:test@localhost:5432/forgeledger_test",
+        )
 
 
 # ---------------------------------------------------------------------------
-# Database schema setup — session-scoped
+# Sample data factories
 # ---------------------------------------------------------------------------
 
-
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def _setup_test_schema(db_pool: asyncpg.Pool) -> AsyncGenerator[None, None]:
-    """Ensure test database schema exists before running tests.
-
-    Creates the ``categories`` and ``transactions`` tables if they do not
-    already exist. This fixture runs once per session and is idempotent.
-    """
-    async with db_pool.acquire() as conn:
-        # Create categories table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS categories (
-                id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                name        VARCHAR(100) NOT NULL UNIQUE,
-                type        VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
-                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-        """)
-
-        # Create transactions table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS transactions (
-                id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                amount      DECIMAL(10,2) NOT NULL CHECK (amount > 0),
-                type        VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
-                category_id UUID REFERENCES categories(id) ON DELETE RESTRICT,
-                date        DATE NOT NULL,
-                description TEXT,
-                created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-        """)
-
-        # Create indexes (IF NOT EXISTS for idempotency)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_transactions_category_id
-                ON transactions(category_id);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_transactions_type
-                ON transactions(type);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_transactions_date
-                ON transactions(date DESC);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_transactions_type_date
-                ON transactions(type, date DESC);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_categories_type
-                ON categories(type);
-        """)
-
-    yield
-
-
-# ---------------------------------------------------------------------------
-# Database cleanup — function-scoped
-# ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _clean_tables(db_pool: asyncpg.Pool) -> AsyncGenerator[None, None]:
-    """Clean all test data before and after each test for isolation.
-
-    Truncates both ``transactions`` and ``categories`` tables using CASCADE
-    to handle foreign key relationships.
-    """
-    async with db_pool.acquire() as conn:
-        await conn.execute("TRUNCATE TABLE transactions CASCADE;")
-        await conn.execute("TRUNCATE TABLE categories CASCADE;")
-
-    yield
-
-    async with db_pool.acquire() as conn:
-        await conn.execute("TRUNCATE TABLE transactions CASCADE;")
-        await conn.execute("TRUNCATE TABLE categories CASCADE;")
-
-
-# ---------------------------------------------------------------------------
-# Database connection — function-scoped
-# ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture
-async def db_conn(db_pool: asyncpg.Pool) -> AsyncGenerator[asyncpg.Connection, None]:
-    """Provide a single database connection for a test function.
-
-    Yields:
-        An ``asyncpg.Connection`` acquired from the session pool.
-    """
-    async with db_pool.acquire() as conn:
-        yield conn
-
-
-# ---------------------------------------------------------------------------
-# FastAPI test application
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def sample_category_income() -> dict:
+    """Return a sample income category dict."""
+    return {
+        "id": str(uuid.uuid4()),
+        "name": "Salary",
+        "type": "income",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @pytest.fixture
-def test_app():
-    """Create a fresh FastAPI application instance for testing.
-
-    Returns a new app from the factory. The app's lifespan events
-    (database pool init/close) are managed separately via the ``db_pool``
-    fixture. For integration tests that need the full app lifecycle,
-    the ``async_client`` fixture should be used instead.
-    """
-    from app.main import create_app
-
-    return create_app()
-
-
-# ---------------------------------------------------------------------------
-# HTTPX async client — function-scoped
-# ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture
-async def async_client(test_app, db_pool: asyncpg.Pool) -> AsyncGenerator[AsyncClient, None]:
-    """Provide an HTTPX ``AsyncClient`` wired to the test FastAPI application.
-
-    This client sends requests directly to the ASGI app without starting
-    a real HTTP server. The database pool is initialised via the ``db_pool``
-    fixture rather than the app lifespan to ensure test isolation.
-
-    Yields:
-        An ``httpx.AsyncClient`` configured with the test application
-        as its transport.
-    """
-    # Inject the test database pool into the app's database module
-    # so that repository code uses the test pool.
-    import app.database as database_module
-
-    original_pool = getattr(database_module, "_pool", None)
-    database_module._pool = db_pool
-
-    transport = ASGITransport(app=test_app)
-
-    async with AsyncClient(
-        transport=transport,
-        base_url="http://testserver",
-        timeout=30.0,
-    ) as client:
-        yield client
-
-    # Restore original pool reference
-    database_module._pool = original_pool
-
-
-# ---------------------------------------------------------------------------
-# Helper fixtures for common test data
-# ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture
-async def sample_category(db_pool: asyncpg.Pool) -> dict:
-    """Create and return a sample expense category for use in tests.
-
-    Returns:
-        A dict with keys ``id``, ``name``, ``type``, and ``created_at``.
-    """
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            INSERT INTO categories (name, type)
-            VALUES ('Test Groceries', 'expense')
-            RETURNING id, name, type, created_at;
-        """)
-
+def sample_category_expense() -> dict:
+    """Return a sample expense category dict."""
     return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "type": row["type"],
-        "created_at": row["created_at"].isoformat(),
+        "id": str(uuid.uuid4()),
+        "name": "Groceries",
+        "type": "expense",
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@pytest_asyncio.fixture
-async def sample_income_category(db_pool: asyncpg.Pool) -> dict:
-    """Create and return a sample income category for use in tests.
-
-    Returns:
-        A dict with keys ``id``, ``name``, ``type``, and ``created_at``.
-    """
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            INSERT INTO categories (name, type)
-            VALUES ('Test Salary', 'income')
-            RETURNING id, name, type, created_at;
-        """)
-
+@pytest.fixture
+def sample_transaction_income(sample_category_income: dict) -> dict:
+    """Return a sample income transaction dict."""
     return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "type": row["type"],
-        "created_at": row["created_at"].isoformat(),
+        "id": str(uuid.uuid4()),
+        "amount": "1500.00",
+        "type": "income",
+        "category_id": sample_category_income["id"],
+        "date": date.today().isoformat(),
+        "description": "Monthly salary",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@pytest_asyncio.fixture
-async def sample_transaction(
-    db_pool: asyncpg.Pool,
-    sample_category: dict,
-) -> dict:
-    """Create and return a sample expense transaction for use in tests.
-
-    Depends on ``sample_category`` to satisfy the foreign key constraint.
-
-    Returns:
-        A dict with keys ``id``, ``amount``, ``type``, ``category_id``,
-        ``date``, ``description``, ``created_at``, and ``updated_at``.
-    """
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO transactions (amount, type, category_id, date, description)
-            VALUES ($1, $2, $3::uuid, $4, $5)
-            RETURNING id, amount, type, category_id, date, description,
-                      created_at, updated_at;
-            """,
-            50.00,
-            "expense",
-            sample_category["id"],
-            "2024-01-15",
-            "Test grocery purchase",
-        )
-
+@pytest.fixture
+def sample_transaction_expense(sample_category_expense: dict) -> dict:
+    """Return a sample expense transaction dict."""
     return {
-        "id": str(row["id"]),
-        "amount": str(row["amount"]),
-        "type": row["type"],
-        "category_id": str(row["category_id"]),
-        "date": row["date"].isoformat(),
-        "description": row["description"],
-        "created_at": row["created_at"].isoformat(),
-        "updated_at": row["updated_at"].isoformat(),
+        "id": str(uuid.uuid4()),
+        "amount": "52.30",
+        "type": "expense",
+        "category_id": sample_category_expense["id"],
+        "date": date.today().isoformat(),
+        "description": "Weekly groceries",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Mock repository fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_transaction_repository() -> MagicMock:
+    """Provide a mock transaction repository for service-layer tests."""
+    repo = MagicMock()
+    repo.create = AsyncMock()
+    repo.get_by_id = AsyncMock()
+    repo.get_all = AsyncMock(return_value=[])
+    repo.update = AsyncMock()
+    repo.delete = AsyncMock()
+    return repo
+
+
+@pytest.fixture
+def mock_category_repository() -> MagicMock:
+    """Provide a mock category repository for service-layer tests."""
+    repo = MagicMock()
+    repo.create = AsyncMock()
+    repo.get_by_id = AsyncMock()
+    repo.get_all = AsyncMock(return_value=[])
+    repo.update = AsyncMock()
+    repo.delete = AsyncMock()
+    repo.has_transactions = AsyncMock(return_value=False)
+    return repo
+
+
+# ---------------------------------------------------------------------------
+# Mock database pool fixture
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_db_pool() -> MagicMock:
+    """Provide a mock asyncpg connection pool."""
+    pool = MagicMock()
+    conn = AsyncMock()
+    pool.acquire = MagicMock(return_value=conn)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=None)
+    conn.fetch = AsyncMock(return_value=[])
+    conn.fetchrow = AsyncMock(return_value=None)
+    conn.execute = AsyncMock(return_value="OK")
+    return pool
